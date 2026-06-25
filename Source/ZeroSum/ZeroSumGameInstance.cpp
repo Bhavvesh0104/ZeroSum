@@ -14,7 +14,6 @@ void UZeroSumGameInstance::Init()
 		{
 			SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &UZeroSumGameInstance::OnCreateSessionComplete);
 			SessionInterface->OnDestroySessionCompleteDelegates.AddUObject(this, &UZeroSumGameInstance::OnDestroySessionComplete);
-
 			SessionInterface->OnFindSessionsCompleteDelegates.AddUObject(this, &UZeroSumGameInstance::OnFindSessionsComplete);
 			SessionInterface->OnJoinSessionCompleteDelegates.AddUObject(this, &UZeroSumGameInstance::OnJoinSessionComplete);
 		}
@@ -41,7 +40,7 @@ void UZeroSumGameInstance::CreateSessionInternal()
 {
 	FOnlineSessionSettings SessionSettings;
 	SessionSettings.bIsLANMatch = true;
-	SessionSettings.NumPublicConnections = 2; // 1v1 setup
+	SessionSettings.NumPublicConnections = 2;
 	SessionSettings.bShouldAdvertise = true;
 	SessionSettings.bUsesPresence = true;
 	SessionSettings.bUseLobbiesIfAvailable = true;
@@ -93,12 +92,8 @@ void UZeroSumGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 			if (Result.IsValid())
 			{
 				FZeroSumSessionInfo SessionInfo;
-				SessionInfo.SessionIndex = i; 
+				SessionInfo.SessionIndex = i;
 				SessionInfo.Ping = Result.PingInMs;
-
-				SessionInfo.CurrentPlayers = Result.Session.SessionSettings.NumPublicConnections - Result.Session.NumOpenPublicConnections;
-				SessionInfo.MaxPlayers = Result.Session.SessionSettings.NumPublicConnections;
-
 				SessionInfo.SessionName = Result.Session.OwningUserName.IsEmpty() ? "ZeroSum Match" : Result.Session.OwningUserName;
 
 				SessionList.Add(SessionInfo);
@@ -111,8 +106,27 @@ void UZeroSumGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 
 void UZeroSumGameInstance::JoinGame(int32 SessionIndex)
 {
+	if (SessionInterface.IsValid() && SessionSearch.IsValid())
+	{
+		if (SessionSearch->SearchResults.IsValidIndex(SessionIndex))
+		{
+			FOnlineSessionSearchResult& TargetResult = SessionSearch->SearchResults[SessionIndex];
+			SessionInterface->JoinSession(0, FName("ZeroSumSession"), TargetResult);
+		}
+	}
 }
 
 void UZeroSumGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
+	if (Result == EOnJoinSessionCompleteResult::Success && SessionInterface.IsValid())
+	{
+		FString ConnectInfo;
+		if (SessionInterface->GetResolvedConnectString(SessionName, ConnectInfo))
+		{
+			if (APlayerController* PC = GetFirstLocalPlayerController())
+			{
+				PC->ClientTravel(ConnectInfo, TRAVEL_Absolute);
+			}
+		}
+	}
 }

@@ -16,12 +16,6 @@ struct FZeroSumSessionInfo
 	int32 Ping;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Network")
-	int32 CurrentPlayers;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Network")
-	int32 MaxPlayers;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Network")
 	int32 SessionIndex;
 };
 
