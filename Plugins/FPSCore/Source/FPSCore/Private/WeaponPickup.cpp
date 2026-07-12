@@ -130,29 +130,52 @@ void AWeaponPickup::SpawnAttachmentMesh()
 
 void AWeaponPickup::Interact()
 {
+	UE_LOG(LogTemp, Warning, TEXT("===== AWeaponPickup::Interact Called ====="));
+
 	// Getting a reference to the Character Controller
-	const AFPSCharacter *PlayerCharacter = Cast<AFPSCharacter>(GetOwner());
+	AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner());
 
-	if (PlayerCharacter->GetInventoryComponent())
+	// BUGFIX: Fallback if the weapon is placed in the level (GetOwner is null)
+	if (!PlayerCharacter && GetWorld() && GetWorld()->GetFirstPlayerController())
 	{
-		int InventoryPosition = PlayerCharacter->GetInventoryComponent()->GetCurrentWeaponSlot();
-		bool SpawnPickup = true;
-
-		// Checking if the player has a free weapon slot. If not, we swap out the currently equipped weapon
-		for (int Index = 0; Index < PlayerCharacter->GetInventoryComponent()->GetNumberOfWeaponSlots(); Index++)
-		{
-			if (PlayerCharacter->GetInventoryComponent()->GetEquippedWeapons().Find(Index) == nullptr)
-			{
-				InventoryPosition = Index;
-				SpawnPickup = false;
-				break;
-			}
-		}
-
-		// Spawning the new weapon in the player's inventory component
-		PlayerCharacter->GetInventoryComponent()->SpawnWeapon(WeaponReference, InventoryPosition, SpawnPickup, bStatic, GetActorTransform(), DataStruct);
-
-		// Destroying the pickup
-		Destroy();
+		PlayerCharacter = Cast<AFPSCharacter>(GetWorld()->GetFirstPlayerController()->GetCharacter());
 	}
+
+	// Validate PlayerCharacter to prevent EXCEPTION_ACCESS_VIOLATION
+	if (!PlayerCharacter)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PlayerCharacter is NULL. Cannot process interaction."));
+		return;
+	}
+
+	// Validate Inventory Component
+	UInventoryComponent* Inventory = PlayerCharacter->GetInventoryComponent();
+	if (!Inventory)
+	{
+		UE_LOG(LogTemp, Error, TEXT("InventoryComponent is NULL."));
+		return;
+	}
+
+	int32 InventoryPosition = Inventory->GetCurrentWeaponSlot();
+	bool bSpawnPickup = true;
+	const int32 NumSlots = Inventory->GetNumberOfWeaponSlots();
+
+	// Checking if the player has a free weapon slot.
+	for (int32 Index = 0; Index < NumSlots; Index++)
+	{
+		if (Inventory->GetEquippedWeapons().Find(Index) == nullptr)
+		{
+			InventoryPosition = Index;
+			bSpawnPickup = false;
+			break;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Spawning Weapon in Slot: %d"), InventoryPosition);
+
+	// Spawning the new weapon in the player's inventory component
+	Inventory->SpawnWeapon(WeaponReference, InventoryPosition, bSpawnPickup, bStatic, GetActorTransform(), DataStruct);
+
+	// Destroying the pickup
+	Destroy();
 }
