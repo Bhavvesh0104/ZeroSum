@@ -126,6 +126,17 @@ void AFPSCharacter::PawnClientRestart()
     }
 }
 
+void AFPSCharacter::Jump()
+{
+    Super::Jump(); // Execute the base physics jump
+
+    // Strip the sprint state so the Animation Blueprint falls back to standard air logic
+    if (MovementState == EMovementState::State_Sprint)
+    {
+        UpdateMovementState(EMovementState::State_Walk);
+    }
+}
+
 void AFPSCharacter::Move(const FInputActionValue &Value)
 {
     // Storing movement vectors for animation manipulation
@@ -139,7 +150,7 @@ void AFPSCharacter::Move(const FInputActionValue &Value)
         AddMovementInput(GetActorRightVector(), Value[0]);
         if (!bHoldingCrouch)
         {
-            if (!bHoldingWalk)
+            if (bHoldingSprint && !bRestrictingSprint && !bAngleRestrictsSprint)
             {
                 UpdateMovementState(EMovementState::State_Sprint);
             }
@@ -185,7 +196,7 @@ void AFPSCharacter::ToggleCrouch()
         float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
         if (MovementState == EMovementState::State_Crouch)
         {
-            StopCrouch(false);
+            StopCrouch();
         }
         else if (MovementState == EMovementState::State_Sprint && !bPerformedSlide && bCanSlide && (ForwardVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed || RightVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed))
         {
@@ -221,7 +232,14 @@ void AFPSCharacter::ReleaseCrouch()
         }
         else if (ForwardVelocity != 0 || RightVelocity != 0)
         {
-            UpdateMovementState(EMovementState::State_Sprint);
+            if (bHoldingSprint && !bRestrictingSprint && !bAngleRestrictsSprint) 
+            { 
+                UpdateMovementState(EMovementState::State_Sprint); 
+            }
+            else 
+            { 
+                UpdateMovementState(EMovementState::State_Walk); 
+            }
         }
         else
         {
@@ -230,11 +248,11 @@ void AFPSCharacter::ReleaseCrouch()
     }
 }
 
-void AFPSCharacter::StopCrouch(const bool bToWalk)
+void AFPSCharacter::StopCrouch()
 {
     if ((MovementState == EMovementState::State_Crouch || MovementState == EMovementState::State_Slide) && HasSpaceToStandUp())
     {
-        if (!bToWalk)
+        if (bHoldingSprint && !bRestrictingSprint && !bAngleRestrictsSprint)
         {
             UpdateMovementState(EMovementState::State_Sprint);
         }
@@ -245,36 +263,37 @@ void AFPSCharacter::StopCrouch(const bool bToWalk)
     }
 }
 
-void AFPSCharacter::StartWalk()
+void AFPSCharacter::StartSprint()
 {
-    bHoldingWalk = true;
-    if (!HasSpaceToStandUp())
+    bHoldingSprint = true;
+    if (!HasSpaceToStandUp() || bRestrictingSprint || bAngleRestrictsSprint)
     {
         return;
     }
     bPerformedSlide = false;
-    UpdateMovementState(EMovementState::State_Walk);
-    bWantsToWalk = true;
+    UpdateMovementState(EMovementState::State_Sprint);
+    bWantsToSprint = true;
 }
 
-void AFPSCharacter::StopWalk()
+void AFPSCharacter::StopSprint()
 {
     float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
     float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
-    bHoldingWalk = false;
+    bHoldingSprint = false;
+    
     if (bHoldingCrouch)
     {
         UpdateMovementState(EMovementState::State_Crouch);
     }
     else if (ForwardVelocity != 0 || RightVelocity != 0)
     {
-        UpdateMovementState(EMovementState::State_Sprint);
+        UpdateMovementState(EMovementState::State_Walk);
     }
     else
     {
         UpdateMovementState(EMovementState::State_Idle);
     }
-    bWantsToWalk = false;
+    bWantsToSprint = false;
 }
 
 void AFPSCharacter::StartSlide()
@@ -310,17 +329,17 @@ void AFPSCharacter::StopSlide()
         {
             UpdateMovementState(EMovementState::State_Crouch);
         }
-        else if (bWantsToWalk)
-        {
-            StopCrouch(true);
-        }
         else if (bHoldingCrouch)
         {
             UpdateMovementState(EMovementState::State_Crouch);
         }
-        else
+        else if (bHoldingSprint && !bRestrictingSprint && !bAngleRestrictsSprint)
         {
             UpdateMovementState(EMovementState::State_Sprint);
+        }
+        else
+        {
+            UpdateMovementState(EMovementState::State_Walk);
         }
         GetWorldTimerManager().ClearTimer(SlideStop);
     }
@@ -333,11 +352,28 @@ void AFPSCharacter::StopSlide()
 void AFPSCharacter::StartAds()
 {
     bWantsToAim = true;
+    bRestrictingSprint = true; 
+    
+    // Force the player out of a sprint immediately upon aiming
+    if (MovementState == EMovementState::State_Sprint)
+    {
+        UpdateMovementState(EMovementState::State_Walk);
+    }
 }
 
 void AFPSCharacter::StopAds()
 {
     bWantsToAim = false;
+    bRestrictingSprint = false; 
+    
+    float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
+    float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
+
+    // Automatically resume sprint if the player is still holding the key and moving safely
+    if (bHoldingSprint && !bAngleRestrictsSprint && (ForwardVelocity != 0 || RightVelocity != 0))
+    {
+        UpdateMovementState(EMovementState::State_Sprint);
+    }
 }
 
 void AFPSCharacter::CheckVault()
@@ -511,7 +547,7 @@ void AFPSCharacter::TimelineProgress(const float Value)
     if (Value == 1)
     {
         bIsVaulting = false;
-        if (!bWantsToWalk)
+        if (bHoldingSprint)
         {
             UpdateMovementState(EMovementState::State_Sprint);
         }
@@ -905,12 +941,15 @@ void AFPSCharacter::Tick(const float DeltaTime)
         if (CurrentRelativeMovementAngle > (SprintAngleLimit * (PI / 180)) && MovementState == EMovementState::State_Sprint)
         {
             UpdateMovementState(EMovementState::State_Walk);
-            bRestrictingSprint = true;
+            bAngleRestrictsSprint = true;
         }
-        else if (CurrentRelativeMovementAngle < (SprintAngleLimit * (PI / 180)) && bRestrictingSprint && !bWantsToWalk)
+        else if (CurrentRelativeMovementAngle < (SprintAngleLimit * (PI / 180)) && bAngleRestrictsSprint && bHoldingSprint)
         {
-            UpdateMovementState(EMovementState::State_Sprint);
-            bRestrictingSprint = false;
+            if (!bRestrictingSprint) 
+            { 
+                UpdateMovementState(EMovementState::State_Sprint); 
+            }
+            bAngleRestrictsSprint = false;
         }
     }
 
@@ -1023,11 +1062,11 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputCompon
             PlayerEnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AFPSCharacter::Jump);
         }
 
-        if (WalkAction)
+        if (SprintAction)
         {
-            // Walking
-            PlayerEnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Started, this, &AFPSCharacter::StartWalk);
-            PlayerEnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Completed, this, &AFPSCharacter::StopWalk);
+            // Sprinting
+            PlayerEnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &AFPSCharacter::StartSprint);
+            PlayerEnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AFPSCharacter::StopSprint);
         }
 
         if (MovementAction)
@@ -1071,6 +1110,12 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputCompon
 
 void AFPSCharacter::Fire()
 {
+    bRestrictingSprint = true;
+    if (MovementState == EMovementState::State_Sprint)
+    {
+        UpdateMovementState(EMovementState::State_Walk);
+    }
+
     if (HasAuthority())
     {
         if (InventoryComponent->GetCurrentWeapon())
@@ -1103,6 +1148,16 @@ void AFPSCharacter::Server_Fire_Implementation(FVector CameraLocation, FRotator 
 
 void AFPSCharacter::StopFire()
 {
+    bRestrictingSprint = false;
+    
+    // Automatically resume sprint if the player is still holding the key, moving safely, and not aiming
+    float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
+    float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
+    if (bHoldingSprint && !bAngleRestrictsSprint && !bWantsToAim && (ForwardVelocity != 0 || RightVelocity != 0))
+    {
+        UpdateMovementState(EMovementState::State_Sprint);
+    }
+
     if (HasAuthority())
     {
         if (InventoryComponent->GetCurrentWeapon())
@@ -1125,12 +1180,22 @@ void AFPSCharacter::Server_StopFire_Implementation()
 {
     if (InventoryComponent->GetCurrentWeapon())
     {
+        // 1. Force the Server to clear its own automatic fire timer
+        InventoryComponent->GetCurrentWeapon()->StopFire(); 
+        
+        // 2. Tell the Client to stop their local recoil and timelines
         InventoryComponent->GetCurrentWeapon()->Client_StopFire();
     }
 }
 
 void AFPSCharacter::Reload()
 {
+    bRestrictingSprint = true;
+    if (MovementState == EMovementState::State_Sprint)
+    {
+        UpdateMovementState(EMovementState::State_Walk);
+    }
+
     if (IsNetMode(NM_DedicatedServer) || IsNetMode(NM_ListenServer))
     {
         if (InventoryComponent->GetCurrentWeapon())
@@ -1141,6 +1206,20 @@ void AFPSCharacter::Reload()
     else
     {
         Server_Reload();
+    }
+}
+
+void AFPSCharacter::Client_CompleteReload_Implementation()
+{
+    bRestrictingSprint = false;
+    
+    // Automatically resume sprint if the player is still holding the key, moving safely, and not aiming
+    float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
+    float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
+    
+    if (bHoldingSprint && !bAngleRestrictsSprint && !bWantsToAim && (ForwardVelocity != 0 || RightVelocity != 0))
+    {
+        UpdateMovementState(EMovementState::State_Sprint);
     }
 }
 

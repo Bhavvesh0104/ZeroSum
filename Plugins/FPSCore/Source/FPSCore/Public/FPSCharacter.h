@@ -167,6 +167,10 @@ public:
 	 */
 	void UpdateMovementState(EMovementState NewMovementState);
 
+	/** Called by the weapon system when a reload finishes to lift movement restrictions */
+	UFUNCTION(Client, Reliable)
+	void Client_CompleteReload();
+
 protected:
 	/** Calling Fire Function */
 	void Fire();
@@ -283,6 +287,7 @@ private:
 	virtual void BeginPlay() override;
 
 	virtual void PawnClientRestart() override;
+	virtual void Jump() override;
 
 	/** Alternative to the built in Crouch function
 	 *  Handles crouch input and decides what action to perform based on the character's current state
@@ -292,17 +297,17 @@ private:
 	/** Transitions the character out of the crouched state
 	 *	@param bToWalk Whether to transition into a sprint state
 	 */
-	void StopCrouch(bool bToWalk);
+	void StopCrouch();
 	;
 
 	/** Exits the character from the slide state if they are sliding and updates bHoldingCrouch */
 	void ReleaseCrouch();
 
-	/** Starting to walk */
-	void StartWalk();
+	/** Starting to sprint */
+	void StartSprint();
 
-	/** Stopping to walk */
-	void StopWalk();
+	/** Stopping to sprint */
+	void StopSprint();
 
 	/** Starting to slide */
 	void StartSlide();
@@ -423,7 +428,7 @@ private:
 
 	/** The game's default FOV */
 	UPROPERTY(EditDefaultsOnly, Category = "Camera | FOV")
-	float BaseFOV = 77.0f;
+	float BaseFOV = 90.0f;
 
 	/** The speed at which FOV changes occur */
 	UPROPERTY(EditDefaultsOnly, Category = "Camera | FOV")
@@ -461,12 +466,13 @@ private:
 	/** Whether the player is holding down the aim down sights button */
 	bool bWantsToAim;
 
-	/** Whether the player is holding down the walk key */
-	bool bWantsToWalk;
+	/** Whether the player is holding down the sprint key */
+	bool bWantsToSprint;
 
-	bool bHoldingWalk;
+	bool bHoldingSprint;
 
 	bool bRestrictingSprint = false;
+	bool bAngleRestrictsSprint = false;
 
 	/** Whether we should display a crosshair or not */
 	bool bShowCrosshair;
@@ -573,7 +579,7 @@ private:
 	UInputAction *JumpAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input | Actions")
-	UInputAction *WalkAction;
+	UInputAction *SprintAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input | Actions")
 	UInputAction *CrouchAction;

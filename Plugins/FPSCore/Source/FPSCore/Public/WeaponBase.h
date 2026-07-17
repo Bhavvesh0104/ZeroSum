@@ -213,10 +213,6 @@ struct FAttachmentData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
 	UAnimSequence *ShotGun_Shot2;
 
-	/** The shooting animation for the Player */
-	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
-	UAnimMontage *Player_Shot;
-
 	/** Unequip animation for the current weapon */
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
 	UAnimMontage *WeaponEquip;
@@ -228,6 +224,14 @@ struct FAttachmentData : public FTableRowBase
 	/** The player's inspect animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
 	UAnimSequence *WeaponInspect;
+
+	/** The shooting animation for the Player */
+	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
+	UAnimMontage *Player_Shot;
+
+	/** An override for the player's ADS shooting animation */
+    UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
+    UAnimMontage* Player_ADS_Shot;
 
 	/** The ammunition type to be used (Spawned on the pickup) */
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
@@ -462,6 +466,10 @@ struct FStaticWeaponData : public FTableRowBase
 	/** The shooting animation for the Player */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
 	UAnimMontage *Player_Shot;
+
+	/** The ADS shooting animation for the Player */
+    UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+    UAnimMontage *Player_ADS_Shot;
 
 	/** An override for the player's reload animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
@@ -768,6 +776,10 @@ public:
 	void HandleUnequip_Implementation(UInventoryComponent *InventoryComponent);
 
 protected:
+
+	/** Called automatically on the Client when the Server assigns ownership */
+	virtual void OnRep_Owner() override;
+
 	/** Multicast of the firing function */
 	UFUNCTION(NetMulticast, Reliable, WithValidation)
 	void Multi_Fire(FHitResult HitResult);
@@ -864,6 +876,9 @@ private:
 	/** Begins applying recoil to the weapon */
 	void StartRecoil();
 
+	/** Callback function for the automatic fire timer */
+	void AutomaticFireTimerCallback();
+	
 	/** Initiates the recoil function */
 	void RecoilRecovery();
 

@@ -13,10 +13,12 @@
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values for this component's properties
 UInventoryComponent::UInventoryComponent()
 {
+	SetIsReplicatedByDefault(true);
 }
 
 // Swapping weapons with the scroll wheel
@@ -379,4 +381,34 @@ void UInventoryComponent::SetupInputComponent(UEnhancedInputComponent *PlayerInp
 		// Playing the inspect animation
 		PlayerInputComponent->BindAction(InspectWeaponAction, ETriggerEvent::Started, this, &UInventoryComponent::Inspect);
 	}
+}
+
+void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    // Register the variable to sync from Server to Client
+    DOREPLIFETIME(UInventoryComponent, CurrentWeapon);
+}
+
+void UInventoryComponent::OnRep_CurrentWeapon()
+{
+    if (CurrentWeapon)
+    {
+        // Unhide the weapon and enable its logic on the Client
+        CurrentWeapon->PrimaryActorTick.bCanEverTick = true;
+        CurrentWeapon->SetActorHiddenInGame(false);
+
+        if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
+        {
+            // Play the Equip Animation locally
+            if (CurrentWeapon->GetStaticWeaponData()->WeaponEquip)
+            {
+                CurrentPlayer->GetHandsMesh()->GetAnimInstance()->StopAllMontages(0.1f);
+                CurrentPlayer->GetHandsMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->WeaponEquip, 1.0f);
+            }
+            // Force the character state machine to refresh
+            CurrentPlayer->UpdateMovementState(CurrentPlayer->GetMovementState());
+        }
+    }
 }

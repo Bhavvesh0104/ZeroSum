@@ -65,6 +65,8 @@ public:
 	/** Sets default values for this component's properties */
 	UInventoryComponent();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	/** Called to bind functionality to input */
 	void SetupInputComponent(class UEnhancedInputComponent *PlayerInputComponent);
 
@@ -178,6 +180,14 @@ private:
 	/** Spawns starter weapons */
 	virtual void BeginPlay() override;
 
+	/** Called automatically on the Client when the Server changes the weapon */
+    UFUNCTION()
+    void OnRep_CurrentWeapon();
+
+    /** The player's currently equipped weapon */
+    UPROPERTY(ReplicatedUsing = OnRep_CurrentWeapon)
+    AWeaponBase *CurrentWeapon;
+	
 	/** Swap to a new weapon
 	 *	@param SlotId The ID of the slot which to swap to
 	 */
@@ -223,10 +233,6 @@ private:
 	int TargetWeaponSlot;
 
 	bool bPerformingWeaponSwap;
-
-	/** The player's currently equipped weapon */
-	UPROPERTY()
-	AWeaponBase *CurrentWeapon;
 
 	FTimerHandle ReloadRetry;
 

@@ -151,6 +151,18 @@ void AWeaponBase::BeginPlay()
     }
 }
 
+void AWeaponBase::OnRep_Owner()
+{
+    Super::OnRep_Owner();
+
+    // The Client now definitively knows who owns this weapon, so we can safely attach it
+    if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
+    {
+        MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+        SetTPAttachment();
+    }
+}
+
 void AWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -214,6 +226,7 @@ void AWeaponBase::SpawnAttachments()
                     WeaponData.Gun_Shot = AttachmentData->Gun_Shot;
                     WeaponData.ShotGun_Shot2 = AttachmentData->ShotGun_Shot2;
                     WeaponData.Player_Shot = AttachmentData->Player_Shot;
+                    WeaponData.Player_ADS_Shot = AttachmentData->Player_ADS_Shot;
                     WeaponData.AccuracyDebuff = AttachmentData->AccuracyDebuff;
                     WeaponData.bWaitForAnim = AttachmentData->bWaitForAnim;
                     WeaponData.bPreventRapidManualFire = AttachmentData->bPreventRapidManualFire;
@@ -282,20 +295,43 @@ void AWeaponBase::StartFire(FVector CameraLocation, FRotator CameraRotation)
 {
     if (bCanFire)
     {
-        // sets a timer for firing the weapon - if bAutomaticFire is true then this timer will repeat until cleared by StopFire(), leading to fully automatic fire
-        GetWorldTimerManager().SetTimer(
-            ShotDelay, [this, CameraLocation, CameraRotation]()
-            { Fire(CameraLocation, CameraRotation); },
-            (60 / WeaponData.RateOfFire), WeaponData.bAutomaticFire, 0.0f);
+        // 1. Execute the very first shot immediately and synchronously
+        Fire(CameraLocation, CameraRotation);
+
+        // 2. If the weapon is automatic, set a looping timer for subsequent shots
+        if (WeaponData.bAutomaticFire && WeaponData.RateOfFire > 0.0f)
+        {
+            GetWorldTimerManager().SetTimer(
+                ShotDelay, 
+                this, 
+                &AWeaponBase::AutomaticFireTimerCallback, 
+                (60.0f / WeaponData.RateOfFire), 
+                true
+            );
+        }
 
         if (bShowDebug)
         {
-            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange, TEXT("Started firing timer"));
+            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange, TEXT("Started firing sequence"));
         }
 
         // Simultaneously begins to play the recoil timeline
-
         Client_StartRecoil();
+    }
+}
+
+void AWeaponBase::AutomaticFireTimerCallback()
+{
+    if (AFPSCharacter* PlayerChar = Cast<AFPSCharacter>(GetOwner()))
+    {
+        if (PlayerChar->GetCameraComponent())
+        {
+            FVector UpdatedLoc = PlayerChar->GetCameraComponent()->GetComponentLocation();
+            FRotator UpdatedRot = PlayerChar->GetCameraComponent()->GetComponentRotation();
+            
+            // Execute the next automatic shot with real-time aim coordinates
+            Fire(UpdatedLoc, UpdatedRot);
+        }
     }
 }
 
@@ -627,10 +663,26 @@ void AWeaponBase::Multi_FireOnce_Implementation()
 
     if (WeaponData.Player_Shot)
     {
-        if (AFPSCharacter *PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
+        if (AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
         {
-            AnimTime = PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(WeaponData.Player_Shot, 1.0f);
-            AnimTime = PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(WeaponData.Player_Shot, 1.0f);
+            // Dynamically select the montage based on the aiming state
+            UAnimMontage* TargetMontage = nullptr;
+
+            if (PlayerCharacter->IsPlayerAiming() && WeaponData.Player_ADS_Shot)
+            {
+                TargetMontage = WeaponData.Player_ADS_Shot;
+            }
+            else if (WeaponData.Player_Shot)
+            {
+                TargetMontage = WeaponData.Player_Shot;
+            }
+
+            // Play the selected montage
+            if (TargetMontage)
+            {
+                AnimTime = PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
+                AnimTime = PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
+            }
         }
     }
 
@@ -742,10 +794,13 @@ bool AWeaponBase::Reload()
         if (!bIsReloading && CharacterController->AmmoMap[GeneralWeaponData.AmmoType] > 0 && (GeneralWeaponData.ClipSize != (GeneralWeaponData.ClipCapacity + Value)))
         {
             Multi_Reload();
-            if (WeaponData.PlayerReload || WeaponData.EmptyPlayerReload)
+            if (GeneralWeaponData.ClipSize <= 0 && WeaponData.EmptyPlayerReload)
             {
-                AnimTime = PlayerCharacter->GetHandsMesh()->GetAnimInstance()->GetCurrentActiveMontage()->GetPlayLength();
-                AnimTime = PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->GetCurrentActiveMontage()->GetPlayLength();
+                AnimTime = WeaponData.EmptyPlayerReload->GetPlayLength();
+            }
+            else if (WeaponData.PlayerReload)
+            {
+                AnimTime = WeaponData.PlayerReload->GetPlayLength();
             }
             else
             {
@@ -909,6 +964,12 @@ void AWeaponBase::UpdateAmmo()
     // Resetting bIsReloading and allowing the player to fire the gun again
     bIsReloading = false;
 
+    // Lift the sprint restriction on the character's owning Client
+    if (PlayerCharacter)
+    {
+        PlayerCharacter->Client_CompleteReload();
+    }
+
     // Making sure the player cannot fire if sliding
     if (!(PlayerCharacter->GetMovementState() == EMovementState::State_Slide))
     {
@@ -931,7 +992,18 @@ void AWeaponBase::Tick(float DeltaTime)
     HorizontalRecoilTimeline.TickTimeline(DeltaTime);
     RecoilRecoveryTimeline.TickTimeline(DeltaTime);
 
-    SetTPAttachment();
+    // Ensure consistent attachment for both Client and Server, fixing initialization race conditions
+    if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
+    {
+        // 1. Force Third Person Attachment (Legacy brute-force behavior)
+        TPMeshComp->AttachToComponent(CurrentPlayer->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+
+        // 2. Intelligently force First Person Attachment if it failed during BeginPlay/OnRep_Owner
+        if (MeshComp->GetAttachParent() == nullptr || MeshComp->GetAttachParent() != CurrentPlayer->GetHandsMesh())
+        {
+            MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+        }
+    }
 
     if (bShowDebug)
     {
