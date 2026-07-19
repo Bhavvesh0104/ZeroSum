@@ -96,8 +96,11 @@ void UInventoryComponent::StarterWeapon()
 						// Spawning attachments if the weapon has them and the attachments table exists
 						if (WeaponData->bHasAttachments && StarterWeapons[i].AttachmentsDataTable)
 						{
-							// Iterating through all the attachments in AttachmentArray
-							for (FName RowName : StarterWeapons[i].DataStruct.WeaponAttachments)
+							// FIX: Inject the Blueprint override array into the struct so the Weapon actually receives it
+							StarterWeapons[i].DataStruct.WeaponAttachments = StarterWeapons[i].AttachmentArrayOverrideRef;
+						
+							// Iterating through the overridden attachments array exposed to Blueprints
+							for (FName RowName : StarterWeapons[i].AttachmentArrayOverrideRef)
 							{
 								// Searching the data table for the attachment
 								const FAttachmentData *AttachmentData = StarterWeapons[i].AttachmentsDataTable->FindRow<FAttachmentData>(
@@ -251,11 +254,13 @@ void UInventoryComponent::SpawnWeapon(TSubclassOf<AWeaponBase> NewWeapon, const 
 				SpawnedWeapon->SetOwner(CurrentPlayer);
 
 				SpawnedWeapon->SetRuntimeWeaponData(DataStruct);
-				SpawnedWeapon->MeshComp->CastShadow = true;
-				SpawnedWeapon->SpawnAttachments();
-
-				SpawnedWeapon->SetOwner(CurrentPlayer);
-				SpawnedWeapon->FinishSpawning(FTransform::Identity);
+            	SpawnedWeapon->MeshComp->CastShadow = true;
+				
+            	SpawnedWeapon->SetOwner(CurrentPlayer);
+            	SpawnedWeapon->FinishSpawning(FTransform::Identity);
+				
+            	// Attachments must be spawned AFTER FinishSpawning triggers BeginPlay to populate WeaponData
+            	SpawnedWeapon->SpawnAttachments();
 
 				// Calling update weapon
 				EquippedWeapons.Add(InventoryPosition, SpawnedWeapon);

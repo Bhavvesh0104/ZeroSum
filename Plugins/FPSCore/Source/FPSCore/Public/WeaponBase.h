@@ -983,7 +983,11 @@ private:
 
 #pragma region INTERNAL_VARIABLES
 
+	UPROPERTY(ReplicatedUsing = OnRep_GeneralWeaponData)
 	FRuntimeWeaponData GeneralWeaponData;
+
+	UFUNCTION()
+	void OnRep_GeneralWeaponData();
 
 	/** collision parameters for spawning the line trace */
 	FCollisionQueryParams QueryParams;

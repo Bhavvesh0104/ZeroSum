@@ -48,7 +48,7 @@ AWeaponBase::AWeaponBase()
 
     MagazineAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("MagazineAttachment"));
     MagazineAttachment->CastShadow = false;
-    MagazineAttachment->SetupAttachment(MeshComp);
+    MagazineAttachment->SetupAttachment(MeshComp, FName("Magazine"));
 
     SightsAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SightsAttachment"));
     SightsAttachment->CastShadow = false;
@@ -153,6 +153,9 @@ void AWeaponBase::BeginPlay()
         MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->FP_WeaponAttachmentSocketName);
         SetTPAttachment();
     }
+    
+    // If OnRep fired too early, this ensures the magazine still spawns once WeaponData is locally available.
+    SpawnAttachments();
 }
 
 void AWeaponBase::OnRep_Owner()
@@ -174,8 +177,13 @@ void AWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifet
     DOREPLIFETIME_CONDITION(AWeaponBase, bOnlyOwnerSee, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(AWeaponBase, bOwnerNoSee, COND_SkipOwner);
     DOREPLIFETIME_CONDITION(AWeaponBase, TPMeshComp, COND_SkipOwner);
+    DOREPLIFETIME(AWeaponBase, GeneralWeaponData);
 }
 
+void AWeaponBase::OnRep_GeneralWeaponData()
+{
+    SpawnAttachments();
+}
 void AWeaponBase::SetTPAttachment()
 {
     if (AFPSCharacter *CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
@@ -186,7 +194,8 @@ void AWeaponBase::SetTPAttachment()
 
 void AWeaponBase::SpawnAttachments()
 {
-    if (WeaponData.bHasAttachments)
+    //FIX: Verifying the DataTable pointer exists before dereferencing
+    if (WeaponData.bHasAttachments && WeaponData.AttachmentsDataTable != nullptr)
     {
         for (FName RowName : GeneralWeaponData.WeaponAttachments)
         {
@@ -212,29 +221,35 @@ void AWeaponBase::SpawnAttachments()
                 else if (AttachmentData->AttachmentType == EAttachmentType::Magazine)
                 {
                     MagazineAttachment->SetSkeletalMesh(AttachmentData->AttachmentMesh);
-                    WeaponData.FireSound = AttachmentData->FiringSoundOverride;
-                    WeaponData.SilencedSound = AttachmentData->SilencedFiringSoundOverride;
+                    
+                    if (AttachmentData->FiringSoundOverride) WeaponData.FireSound = AttachmentData->FiringSoundOverride;
+                    if (AttachmentData->SilencedFiringSoundOverride) WeaponData.SilencedSound = AttachmentData->SilencedFiringSoundOverride;
+                    
                     WeaponData.RateOfFire = AttachmentData->FireRate;
                     WeaponData.bAutomaticFire = AttachmentData->AutomaticFire;
-                    WeaponData.VerticalRecoilCurve = AttachmentData->VerticalRecoilCurve;
-                    WeaponData.HorizontalRecoilCurve = AttachmentData->HorizontalRecoilCurve;
-                    WeaponData.RecoilCameraShake = AttachmentData->RecoilCameraShake;
+                    
+                    if (AttachmentData->VerticalRecoilCurve) WeaponData.VerticalRecoilCurve = AttachmentData->VerticalRecoilCurve;
+                    if (AttachmentData->HorizontalRecoilCurve) WeaponData.HorizontalRecoilCurve = AttachmentData->HorizontalRecoilCurve;
+                    if (AttachmentData->RecoilCameraShake) WeaponData.RecoilCameraShake = AttachmentData->RecoilCameraShake;
+                    
                     WeaponData.bIsShotgun = AttachmentData->bIsShotgun;
                     WeaponData.ShotgunRange = AttachmentData->ShotgunRange;
                     WeaponData.ShotgunPellets = AttachmentData->ShotgunPellets;
-                    WeaponData.EmptyWeaponReload = AttachmentData->EmptyWeaponReload;
-                    WeaponData.WeaponReload = AttachmentData->WeaponReload;
-                    WeaponData.WeaponIdle = AttachmentData->WeaponIdle;
-                    WeaponData.FP_EmptyPlayerReload = AttachmentData->FP_EmptyPlayerReload;
-                    WeaponData.TP_EmptyPlayerReload = AttachmentData->TP_EmptyPlayerReload;
-                    WeaponData.FP_PlayerReload = AttachmentData->FP_PlayerReload;
-                    WeaponData.TP_PlayerReload = AttachmentData->TP_PlayerReload;
-                    WeaponData.Gun_Shot = AttachmentData->Gun_Shot;
-                    WeaponData.ShotGun_Shot2 = AttachmentData->ShotGun_Shot2;
-                    WeaponData.FP_Player_Shot = AttachmentData->FP_Player_Shot;
-                    WeaponData.TP_Player_Shot = AttachmentData->TP_Player_Shot;
-                    WeaponData.FP_Player_ADS_Shot = AttachmentData->FP_Player_ADS_Shot;
-                    WeaponData.TP_Player_ADS_Shot = AttachmentData->TP_Player_ADS_Shot;
+                    
+                    if (AttachmentData->EmptyWeaponReload) WeaponData.EmptyWeaponReload = AttachmentData->EmptyWeaponReload;
+                    if (AttachmentData->WeaponReload) WeaponData.WeaponReload = AttachmentData->WeaponReload;
+                    if (AttachmentData->WeaponIdle) WeaponData.WeaponIdle = AttachmentData->WeaponIdle;
+                    if (AttachmentData->FP_EmptyPlayerReload) WeaponData.FP_EmptyPlayerReload = AttachmentData->FP_EmptyPlayerReload;
+                    if (AttachmentData->TP_EmptyPlayerReload) WeaponData.TP_EmptyPlayerReload = AttachmentData->TP_EmptyPlayerReload;
+                    if (AttachmentData->FP_PlayerReload) WeaponData.FP_PlayerReload = AttachmentData->FP_PlayerReload;
+                    if (AttachmentData->TP_PlayerReload) WeaponData.TP_PlayerReload = AttachmentData->TP_PlayerReload;
+                    if (AttachmentData->Gun_Shot) WeaponData.Gun_Shot = AttachmentData->Gun_Shot;
+                    if (AttachmentData->ShotGun_Shot2) WeaponData.ShotGun_Shot2 = AttachmentData->ShotGun_Shot2;
+                    if (AttachmentData->FP_Player_Shot) WeaponData.FP_Player_Shot = AttachmentData->FP_Player_Shot;
+                    if (AttachmentData->TP_Player_Shot) WeaponData.TP_Player_Shot = AttachmentData->TP_Player_Shot;
+                    if (AttachmentData->FP_Player_ADS_Shot) WeaponData.FP_Player_ADS_Shot = AttachmentData->FP_Player_ADS_Shot;
+                    if (AttachmentData->TP_Player_ADS_Shot) WeaponData.TP_Player_ADS_Shot = AttachmentData->TP_Player_ADS_Shot;
+                    
                     WeaponData.AccuracyDebuff = AttachmentData->AccuracyDebuff;
                     WeaponData.bWaitForAnim = AttachmentData->bWaitForAnim;
                     WeaponData.bPreventRapidManualFire = AttachmentData->bPreventRapidManualFire;
@@ -795,7 +810,10 @@ bool AWeaponBase::Reload()
 
     // Casting to the character controller (which stores all the ammunition and health variables)
     AFPSCharacter *PlayerCharacter = Cast<AFPSCharacter>(GetOwner());
+    if (!PlayerCharacter) return false;
+
     AFPSCharacterController *CharacterController = Cast<AFPSCharacterController>(PlayerCharacter->GetController());
+    if (!CharacterController) return false;
 
     // Checking if we are not reloading, if a reloading montage exists, and if there is any point in reloading
     // (current ammunition does not match maximum magazine capacity and there is spare ammunition to load into the gun)
@@ -856,27 +874,15 @@ void AWeaponBase::Multi_Reload_Implementation()
 
     if (bIsEmpty && WeaponData.EmptyWeaponReload)
     {
-        if (WeaponData.bHasAttachments)
-        {
-            MagazineAttachment->PlayAnimation(WeaponData.EmptyWeaponReload, false);
-        }
-        else
-        {
-            MeshComp->PlayAnimation(WeaponData.EmptyWeaponReload, false);
-            TPMeshComp->PlayAnimation(WeaponData.EmptyWeaponReload, false);
-        }
+        // Force the base weapon mesh to play the animation.
+        // The b_gun_mag bone will move, carrying the attached Magazine mesh with it.
+        MeshComp->PlayAnimation(WeaponData.EmptyWeaponReload, false);
+        TPMeshComp->PlayAnimation(WeaponData.EmptyWeaponReload, false);
     }
     else if (!bIsEmpty && WeaponData.WeaponReload)
     {
-        if (WeaponData.bHasAttachments)
-        {
-            MagazineAttachment->GetAnimInstance()->Montage_Play(WeaponData.WeaponReload, 1.0f);
-        }
-        else
-        {
-            MeshComp->PlayAnimation(WeaponData.WeaponReload, false);
-            TPMeshComp->PlayAnimation(WeaponData.WeaponReload, false);
-        }
+        MeshComp->PlayAnimation(WeaponData.WeaponReload, false);
+        TPMeshComp->PlayAnimation(WeaponData.WeaponReload, false);
     }
 
     if (PlayerCharacter->IsLocallyControlled())
