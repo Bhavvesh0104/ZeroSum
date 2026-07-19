@@ -150,14 +150,17 @@ void UInventoryComponent::SwapWeapon(const int SlotId)
 	}
 	if (!bPerformingWeaponSwap)
 	{
-		if (CurrentWeapon->GetStaticWeaponData()->WeaponUnequip)
+		if (!bPerformingWeaponSwap)
 		{
-			CurrentWeapon->Client_StopFire();
-			CurrentWeapon->SetCanFire(false);
-			bPerformingWeaponSwap = true;
-			TargetWeaponSlot = SlotId;
-			CurrentWeapon->HandleUnequip(this);
-			return;
+			if (CurrentWeapon->GetStaticWeaponData()->FP_WeaponUnequip)
+			{
+				CurrentWeapon->Client_StopFire();
+				CurrentWeapon->SetCanFire(false);
+				bPerformingWeaponSwap = true;
+				TargetWeaponSlot = SlotId;
+				CurrentWeapon->HandleUnequip(this);
+				return;
+			}
 		}
 	}
 	CurrentWeaponSlot = SlotId;
@@ -177,15 +180,16 @@ void UInventoryComponent::SwapWeapon(const int SlotId)
 	{
 		CurrentWeapon->PrimaryActorTick.bCanEverTick = true;
 		CurrentWeapon->SetActorHiddenInGame(false);
-		if (!CurrentWeapon->GetStaticWeaponData()->WeaponUnequip)
+		if (!CurrentWeapon->GetStaticWeaponData()->FP_WeaponUnequip)
 		{
-			if (CurrentWeapon->GetStaticWeaponData()->WeaponEquip)
+			if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
 			{
-				if (AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
+				if (CurrentPlayer->IsLocallyControlled() && CurrentWeapon->GetStaticWeaponData()->FP_WeaponEquip)
 				{
-					FPSCharacter->UpdateMovementState(FPSCharacter->GetMovementState());
-					CurrentWeapon->Multi_SwapWeaponAnim();
+					CurrentPlayer->GetHandsMesh()->GetAnimInstance()->StopAllMontages(0.1f);
+					CurrentPlayer->GetHandsMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->FP_WeaponEquip, 1.0f);
 				}
+				CurrentPlayer->UpdateMovementState(CurrentPlayer->GetMovementState());
 			}
 		}
 	}
@@ -284,14 +288,19 @@ void UInventoryComponent::UpdateWeapon(AWeaponBase *SpawnedWeapon, const int Inv
 			CurrentWeapon->PrimaryActorTick.bCanEverTick = true;
 			CurrentWeapon->SetActorHiddenInGame(false);
 
-			if (CurrentWeapon->GetStaticWeaponData()->WeaponEquip)
+			if (CurrentPlayer)
 			{
-				if (CurrentPlayer)
+				if (CurrentPlayer->IsLocallyControlled() && CurrentWeapon->GetStaticWeaponData()->FP_WeaponEquip)
 				{
 					CurrentPlayer->GetHandsMesh()->GetAnimInstance()->StopAllMontages(0.1f);
-					CurrentPlayer->GetHandsMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->WeaponEquip, 1.0f);
-					CurrentPlayer->UpdateMovementState(CurrentPlayer->GetMovementState());
+					CurrentPlayer->GetHandsMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->FP_WeaponEquip, 1.0f);
 				}
+				else if (!CurrentPlayer->IsLocallyControlled() && CurrentWeapon->GetStaticWeaponData()->TP_WeaponEquip)
+				{
+					CurrentPlayer->GetThirdPersonMesh()->GetAnimInstance()->StopAllMontages(0.1f);
+					CurrentPlayer->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->TP_WeaponEquip, 1.0f);
+				}
+				CurrentPlayer->UpdateMovementState(CurrentPlayer->GetMovementState());
 			}
 		}
 	}
@@ -398,16 +407,29 @@ void UInventoryComponent::OnRep_CurrentWeapon()
         // Unhide the weapon and enable its logic on the Client
         CurrentWeapon->PrimaryActorTick.bCanEverTick = true;
         CurrentWeapon->SetActorHiddenInGame(false);
+        
+        // Force weapon attachment immediately to prevent clipping/invisibility race conditions on Simulated Proxies
+        CurrentWeapon->SetTPAttachment();
 
         if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
         {
-            // Play the Equip Animation locally
-            if (CurrentWeapon->GetStaticWeaponData()->WeaponEquip)
+            if (CurrentPlayer->IsLocallyControlled())
             {
-                CurrentPlayer->GetHandsMesh()->GetAnimInstance()->StopAllMontages(0.1f);
-                CurrentPlayer->GetHandsMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->WeaponEquip, 1.0f);
+                if (CurrentWeapon->GetStaticWeaponData()->FP_WeaponEquip && CurrentPlayer->GetHandsMesh()->GetAnimInstance())
+                {
+                    CurrentPlayer->GetHandsMesh()->GetAnimInstance()->StopAllMontages(0.1f);
+                    CurrentPlayer->GetHandsMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->FP_WeaponEquip, 1.0f);
+                }
             }
-            // Force the character state machine to refresh
+            else
+            {
+                // Safely skips if TP_WeaponEquip is left empty in the Data Table
+                if (CurrentWeapon->GetStaticWeaponData()->TP_WeaponEquip && CurrentPlayer->GetThirdPersonMesh()->GetAnimInstance())
+                {
+                    CurrentPlayer->GetThirdPersonMesh()->GetAnimInstance()->StopAllMontages(0.1f);
+                    CurrentPlayer->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(CurrentWeapon->GetStaticWeaponData()->TP_WeaponEquip, 1.0f);
+                }
+            }
             CurrentPlayer->UpdateMovementState(CurrentPlayer->GetMovementState());
         }
     }

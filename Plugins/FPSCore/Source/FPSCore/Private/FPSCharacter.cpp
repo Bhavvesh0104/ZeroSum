@@ -29,16 +29,20 @@ AFPSCharacter::AFPSCharacter()
     // Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
     PrimaryActorTick.bCanEverTick = true;
 
-    // Spawning the camera atop the FPS hands mesh
-    CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComp"));
-    CameraComponent->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::KeepRelativeTransform);
-    CameraComponent->bUsePawnControlRotation = true;
+    // Spawn Pivot and attach to Capsule
+    PivotComponent = CreateDefaultSubobject<USceneComponent>(TEXT("PivotComp"));
+    PivotComponent->SetupAttachment(GetCapsuleComponent());
 
-    // Spawning the FPS hands mesh component and attaching it to the camera component
+    // Spawn Hands and attach to Pivot (Restored original identifier)
     HandsMeshComp = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("MeshComp"));
     HandsMeshComp->CastShadow = false;
     HandsMeshComp->bOnlyOwnerSee = true;
-    HandsMeshComp->AttachToComponent(CameraComponent, FAttachmentTransformRules::KeepRelativeTransform);
+    HandsMeshComp->SetupAttachment(PivotComponent);
+
+    // Spawn Camera and attach to the "head" bone of the Hands (Restored original identifier)
+    CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComp"));
+    CameraComponent->SetupAttachment(HandsMeshComp, FName("head"));
+    CameraComponent->bUsePawnControlRotation = false;
 
     // Spawning the FPS third person mesh component and attaching it to the capsule component
     ThirdPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ThirdPersonMesh"));
@@ -77,7 +81,8 @@ void AFPSCharacter::BeginPlay()
         UE_LOG(LogProfilingDebugging, Error, TEXT("Set up data in MovementDataMap! BeginPlay"));
     }
 
-    DefaultCameraOffset = CameraComponent->GetRelativeLocation().Z; // Setting the default location of the camera
+    // Capture the starting Z-height of the Pivot (e.g. 64.0) 
+    DefaultCameraOffset = PivotComponent->GetRelativeLocation().Z;
 
     // Binding a timeline to our vaulting curve
     if (VaultTimelineCurve)
@@ -929,9 +934,19 @@ void AFPSCharacter::Tick(const float DeltaTime)
     CurrentCameraOffset = NewLocation;
     // Sets the half height of the capsule component to the new interpolated half height
     GetCapsuleComponent()->SetCapsuleHalfHeight(NewHalfHeight);
-    FVector NewCameraLocation = CameraComponent->GetRelativeLocation();
-    NewCameraLocation.Z = NewLocation;
-    CameraComponent->SetRelativeLocation(NewCameraLocation);
+    
+    // Apply Control Rotation Pitch to the Pivot
+    if (Controller)
+    {
+        FRotator PivotRot = PivotComponent->GetRelativeRotation();
+        PivotRot.Pitch = Controller->GetControlRotation().Pitch;
+        PivotComponent->SetRelativeRotation(PivotRot);
+    }
+
+    // Apply Crouching Z-Offset to the Pivot instead of the Camera
+    FVector NewPivotLocation = PivotComponent->GetRelativeLocation();
+    NewPivotLocation.Z = NewLocation;
+    PivotComponent->SetRelativeLocation(NewPivotLocation);
 
     if (bRestrictSprintAngle)
     {

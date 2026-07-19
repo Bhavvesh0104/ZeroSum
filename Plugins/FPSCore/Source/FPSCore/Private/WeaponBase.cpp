@@ -96,9 +96,13 @@ void AWeaponBase::BeginPlay()
     // Setting our default animation values
     // We set these here, but they can be overriden later by variables from applied attachments.
 
-    if (WeaponData.WeaponEquip)
+    if (WeaponData.FP_WeaponEquip)
     {
-        WeaponEquip = WeaponData.WeaponEquip;
+        FP_WeaponEquip = WeaponData.FP_WeaponEquip;
+    }
+    if (WeaponData.TP_WeaponEquip)
+    {
+        TP_WeaponEquip = WeaponData.TP_WeaponEquip;
     }
     if (WeaponData.BS_Walk)
     {
@@ -146,7 +150,7 @@ void AWeaponBase::BeginPlay()
     // Attaching weapons to their respective character meshes
     if (AFPSCharacter *CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
     {
-        MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+        MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->FP_WeaponAttachmentSocketName);
         SetTPAttachment();
     }
 }
@@ -158,7 +162,7 @@ void AWeaponBase::OnRep_Owner()
     // The Client now definitively knows who owns this weapon, so we can safely attach it
     if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
     {
-        MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+        MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->FP_WeaponAttachmentSocketName);
         SetTPAttachment();
     }
 }
@@ -176,7 +180,7 @@ void AWeaponBase::SetTPAttachment()
 {
     if (AFPSCharacter *CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
     {
-        TPMeshComp->AttachToComponent(CurrentPlayer->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+        TPMeshComp->AttachToComponent(CurrentPlayer->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->TP_WeaponAttachmentSocketName);
     }
 }
 
@@ -221,12 +225,16 @@ void AWeaponBase::SpawnAttachments()
                     WeaponData.EmptyWeaponReload = AttachmentData->EmptyWeaponReload;
                     WeaponData.WeaponReload = AttachmentData->WeaponReload;
                     WeaponData.WeaponIdle = AttachmentData->WeaponIdle;
-                    WeaponData.EmptyPlayerReload = AttachmentData->EmptyPlayerReload;
-                    WeaponData.PlayerReload = AttachmentData->PlayerReload;
+                    WeaponData.FP_EmptyPlayerReload = AttachmentData->FP_EmptyPlayerReload;
+                    WeaponData.TP_EmptyPlayerReload = AttachmentData->TP_EmptyPlayerReload;
+                    WeaponData.FP_PlayerReload = AttachmentData->FP_PlayerReload;
+                    WeaponData.TP_PlayerReload = AttachmentData->TP_PlayerReload;
                     WeaponData.Gun_Shot = AttachmentData->Gun_Shot;
                     WeaponData.ShotGun_Shot2 = AttachmentData->ShotGun_Shot2;
-                    WeaponData.Player_Shot = AttachmentData->Player_Shot;
-                    WeaponData.Player_ADS_Shot = AttachmentData->Player_ADS_Shot;
+                    WeaponData.FP_Player_Shot = AttachmentData->FP_Player_Shot;
+                    WeaponData.TP_Player_Shot = AttachmentData->TP_Player_Shot;
+                    WeaponData.FP_Player_ADS_Shot = AttachmentData->FP_Player_ADS_Shot;
+                    WeaponData.TP_Player_ADS_Shot = AttachmentData->TP_Player_ADS_Shot;
                     WeaponData.AccuracyDebuff = AttachmentData->AccuracyDebuff;
                     WeaponData.bWaitForAnim = AttachmentData->bWaitForAnim;
                     WeaponData.bPreventRapidManualFire = AttachmentData->bPreventRapidManualFire;
@@ -247,9 +255,13 @@ void AWeaponBase::SpawnAttachments()
                 else if (AttachmentData->AttachmentType == EAttachmentType::Grip)
                 {
                     GripAttachment->SetSkeletalMesh(AttachmentData->AttachmentMesh);
-                    if (AttachmentData->WeaponEquip)
+                    if (AttachmentData->FP_WeaponEquip)
                     {
-                        WeaponEquip = AttachmentData->WeaponEquip;
+                        WeaponData.FP_WeaponEquip = AttachmentData->FP_WeaponEquip;
+                    }
+                    if (AttachmentData->TP_WeaponEquip)
+                    {
+                        WeaponData.TP_WeaponEquip = AttachmentData->TP_WeaponEquip;
                     }
                     if (AttachmentData->BS_Walk)
                     {
@@ -661,27 +673,25 @@ void AWeaponBase::Multi_FireOnce_Implementation()
         }
     }
 
-    if (WeaponData.Player_Shot)
+    if (AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
     {
-        if (AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
+        UAnimMontage* TargetMontage = nullptr;
+
+        if (PlayerCharacter->IsLocallyControlled())
         {
-            // Dynamically select the montage based on the aiming state
-            UAnimMontage* TargetMontage = nullptr;
-
-            if (PlayerCharacter->IsPlayerAiming() && WeaponData.Player_ADS_Shot)
-            {
-                TargetMontage = WeaponData.Player_ADS_Shot;
-            }
-            else if (WeaponData.Player_Shot)
-            {
-                TargetMontage = WeaponData.Player_Shot;
-            }
-
-            // Play the selected montage
-            if (TargetMontage)
+            TargetMontage = PlayerCharacter->IsPlayerAiming() && WeaponData.FP_Player_ADS_Shot ? WeaponData.FP_Player_ADS_Shot : WeaponData.FP_Player_Shot;
+            if (TargetMontage && PlayerCharacter->GetHandsMesh()->GetAnimInstance())
             {
                 AnimTime = PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
-                AnimTime = PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
+            }
+        }
+        else
+        {
+            TargetMontage = PlayerCharacter->IsPlayerAiming() && WeaponData.TP_Player_ADS_Shot ? WeaponData.TP_Player_ADS_Shot : WeaponData.TP_Player_Shot;
+            if (TargetMontage && PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance())
+            {
+                // We do not overwrite AnimTime for simulated proxies to avoid timer desync on the local client
+                PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
             }
         }
     }
@@ -794,13 +804,21 @@ bool AWeaponBase::Reload()
         if (!bIsReloading && CharacterController->AmmoMap[GeneralWeaponData.AmmoType] > 0 && (GeneralWeaponData.ClipSize != (GeneralWeaponData.ClipCapacity + Value)))
         {
             Multi_Reload();
-            if (GeneralWeaponData.ClipSize <= 0 && WeaponData.EmptyPlayerReload)
+            UAnimMontage* TargetMontage = nullptr;
+            bool bIsEmpty = GeneralWeaponData.ClipSize <= 0;
+
+            if (PlayerCharacter && PlayerCharacter->IsLocallyControlled())
             {
-                AnimTime = WeaponData.EmptyPlayerReload->GetPlayLength();
+                TargetMontage = bIsEmpty ? WeaponData.FP_EmptyPlayerReload : WeaponData.FP_PlayerReload;
             }
-            else if (WeaponData.PlayerReload)
+            else
             {
-                AnimTime = WeaponData.PlayerReload->GetPlayLength();
+                TargetMontage = bIsEmpty ? WeaponData.TP_EmptyPlayerReload : WeaponData.TP_PlayerReload;
+            }
+
+            if (TargetMontage)
+            {
+                AnimTime = TargetMontage->GetPlayLength();
             }
             else
             {
@@ -832,10 +850,11 @@ bool AWeaponBase::Multi_Reload_Validate()
 void AWeaponBase::Multi_Reload_Implementation()
 {
     AFPSCharacter *PlayerCharacter = Cast<AFPSCharacter>(GetOwner());
+    if (!PlayerCharacter) return;
 
-    // Differentiating between having no ammunition in the magazine (having to chamber a round after reloading)
-    // or not, and playing an animation relevant to that
-    if (GeneralWeaponData.ClipSize <= 0 && WeaponData.EmptyPlayerReload)
+    bool bIsEmpty = GeneralWeaponData.ClipSize <= 0;
+
+    if (bIsEmpty && WeaponData.EmptyWeaponReload)
     {
         if (WeaponData.bHasAttachments)
         {
@@ -846,10 +865,8 @@ void AWeaponBase::Multi_Reload_Implementation()
             MeshComp->PlayAnimation(WeaponData.EmptyWeaponReload, false);
             TPMeshComp->PlayAnimation(WeaponData.EmptyWeaponReload, false);
         }
-        PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(WeaponData.EmptyPlayerReload, 1.0f);
-        PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(WeaponData.EmptyPlayerReload, 1.0f);
     }
-    else if (WeaponData.PlayerReload)
+    else if (!bIsEmpty && WeaponData.WeaponReload)
     {
         if (WeaponData.bHasAttachments)
         {
@@ -860,8 +877,23 @@ void AWeaponBase::Multi_Reload_Implementation()
             MeshComp->PlayAnimation(WeaponData.WeaponReload, false);
             TPMeshComp->PlayAnimation(WeaponData.WeaponReload, false);
         }
-        PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(WeaponData.PlayerReload, 1.0f);
-        PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(WeaponData.PlayerReload, 1.0f);
+    }
+
+    if (PlayerCharacter->IsLocallyControlled())
+    {
+        UAnimMontage* TargetMontage = bIsEmpty ? WeaponData.FP_EmptyPlayerReload : WeaponData.FP_PlayerReload;
+        if (TargetMontage && PlayerCharacter->GetHandsMesh()->GetAnimInstance())
+        {
+            PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
+        }
+    }
+    else
+    {
+        UAnimMontage* TargetMontage = bIsEmpty ? WeaponData.TP_EmptyPlayerReload : WeaponData.TP_PlayerReload;
+        if (TargetMontage && PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance())
+        {
+            PlayerCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
+        }
     }
 }
 
@@ -869,13 +901,19 @@ void AWeaponBase::Multi_SwapWeaponAnim_Implementation()
 {
     if (AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
     {
-        // Set a timer to play the second animation
-        if (GetStaticWeaponData()->WeaponEquip)
+        if (FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->FP_WeaponEquip)
         {
-            UAnimMontage *EquipMontage = GetStaticWeaponData()->WeaponEquip;
-            // Play the second animation
-            FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(EquipMontage, 1.0f);
-            FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(EquipMontage, 1.0f);
+            if (FPSCharacter->GetHandsMesh()->GetAnimInstance())
+            {
+                FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->FP_WeaponEquip, 1.0f);
+            }
+        }
+        else if (!FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->TP_WeaponEquip)
+        {
+            if (FPSCharacter->GetThirdPersonMesh()->GetAnimInstance())
+            {
+                FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->TP_WeaponEquip, 1.0f);
+            }
         }
     }
 }
@@ -884,29 +922,42 @@ void AWeaponBase::Multi_UnequipWeaponAnim_Implementation()
 {
     if (AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
     {
-        // Set a timer to play the second animation
-        if (GetStaticWeaponData()->WeaponUnequip)
+        if (FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->FP_WeaponUnequip)
         {
-            UAnimMontage *UnequipMontage = GetStaticWeaponData()->WeaponUnequip;
-            // Play the second animation
-            FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(UnequipMontage, 1.0f);
+            if (FPSCharacter->GetHandsMesh()->GetAnimInstance())
+            {
+                FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->FP_WeaponUnequip, 1.0f);
+            }
+        }
+        else if (!FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->TP_WeaponUnequip)
+        {
+            if (FPSCharacter->GetThirdPersonMesh()->GetAnimInstance())
+            {
+                FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->TP_WeaponUnequip, 1.0f);
+            }
         }
     }
 }
 
 void AWeaponBase::HandleUnequip_Implementation(UInventoryComponent *InventoryComponent)
 {
-    if (GetStaticWeaponData()->WeaponUnequip)
+    if (const AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
     {
-        if (const AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
+        FTimerHandle WeaponSwapDelegate;
+        float UnequipAnimTime = 0.1f; // Safe fallback duration
+
+        if (FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->FP_WeaponUnequip)
         {
-            FTimerHandle WeaponSwapDelegate;
-            const float UnequipAnimTime = FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->WeaponUnequip, 1.0f);
-            FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->WeaponUnequip, 1.0f);
-            Multi_UnequipWeaponAnim();
-            FTimerDelegate TimerDelegate = FTimerDelegate::CreateUObject(InventoryComponent, &UInventoryComponent::UnequipReturn);
-            GetWorld()->GetTimerManager().SetTimer(WeaponSwapDelegate, TimerDelegate, UnequipAnimTime, false, UnequipAnimTime);
+            UnequipAnimTime = FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->FP_WeaponUnequip, 1.0f);
         }
+        else if (!FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->TP_WeaponUnequip)
+        {
+            UnequipAnimTime = FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->TP_WeaponUnequip, 1.0f);
+        }
+        
+        Multi_UnequipWeaponAnim();
+        FTimerDelegate TimerDelegate = FTimerDelegate::CreateUObject(InventoryComponent, &UInventoryComponent::UnequipReturn);
+        GetWorld()->GetTimerManager().SetTimer(WeaponSwapDelegate, TimerDelegate, UnequipAnimTime, false, UnequipAnimTime);
     }
 }
 
@@ -996,12 +1047,12 @@ void AWeaponBase::Tick(float DeltaTime)
     if (AFPSCharacter* CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
     {
         // 1. Force Third Person Attachment (Legacy brute-force behavior)
-        TPMeshComp->AttachToComponent(CurrentPlayer->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+        TPMeshComp->AttachToComponent(CurrentPlayer->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->TP_WeaponAttachmentSocketName);
 
         // 2. Intelligently force First Person Attachment if it failed during BeginPlay/OnRep_Owner
         if (MeshComp->GetAttachParent() == nullptr || MeshComp->GetAttachParent() != CurrentPlayer->GetHandsMesh())
         {
-            MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->WeaponAttachmentSocketName);
+            MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->FP_WeaponAttachmentSocketName);
         }
     }
 

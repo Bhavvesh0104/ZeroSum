@@ -229,10 +229,14 @@ protected:
 
 	void EnableWeaponFire();
 
+	/** Pivot component for independent pitch rotation */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Components")
+    USceneComponent* PivotComponent;
+
 	/** The character's FPS camera component */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Components")
 	UCameraComponent *CameraComponent;
-
+	
 	/** The character's hands mesh component */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
 	USkeletalMeshComponent *HandsMeshComp;

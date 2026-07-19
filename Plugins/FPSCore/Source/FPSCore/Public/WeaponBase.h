@@ -213,9 +213,13 @@ struct FAttachmentData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
 	UAnimSequence *ShotGun_Shot2;
 
-	/** Unequip animation for the current weapon */
+	/** FP Equip animation for the current weapon */
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
-	UAnimMontage *WeaponEquip;
+	UAnimMontage *FP_WeaponEquip;
+
+	/** TP Equip animation for the current weapon */
+	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
+	UAnimMontage *TP_WeaponEquip;
 
 	/** The player's inspect animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
@@ -225,13 +229,21 @@ struct FAttachmentData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Grip", meta = (EditCondition = "AttachmentType == EAttachmentType::Grip"))
 	UAnimSequence *WeaponInspect;
 
-	/** The shooting animation for the Player */
+	/** FP shooting animation for the Player */
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
-	UAnimMontage *Player_Shot;
+	UAnimMontage *FP_Player_Shot;
 
-	/** An override for the player's ADS shooting animation */
+	/** TP shooting animation for the Player */
+	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
+	UAnimMontage *TP_Player_Shot;
+
+	/** FP ADS shooting animation for the Player */
     UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
-    UAnimMontage* Player_ADS_Shot;
+    UAnimMontage *FP_Player_ADS_Shot;
+
+	/** TP ADS shooting animation for the Player */
+    UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
+    UAnimMontage *TP_Player_ADS_Shot;
 
 	/** The ammunition type to be used (Spawned on the pickup) */
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
@@ -305,13 +317,21 @@ struct FAttachmentData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
 	UAnimSequence *WeaponIdle;
 
-	/** An override for the player's empty reload animation */
+	/** FP empty reload animation for the Player */
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
-	UAnimMontage *EmptyPlayerReload;
+	UAnimMontage *FP_EmptyPlayerReload;
 
-	/** An override for the player's reload animation */
+	/** TP empty reload animation for the Player */
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
-	UAnimMontage *PlayerReload;
+	UAnimMontage *TP_EmptyPlayerReload;
+
+	/** FP reload animation for the Player */
+	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
+	UAnimMontage *FP_PlayerReload;
+
+	/** TP reload animation for the Player */
+	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
+	UAnimMontage *TP_PlayerReload;
 
 	/** The firing sound to use instead of the default for this particular magazine attachment */
 	UPROPERTY(EditDefaultsOnly, Category = "Magazine", meta = (EditCondition = "AttachmentType == EAttachmentType::Magazine"))
@@ -355,9 +375,13 @@ struct FStaticWeaponData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Required")
 	TSubclassOf<AWeaponPickup> PickupReference;
 
-	/** Determines the socket or bone with which the weapon will be attached to the character's hand (typically the root bone or the grip bone) */
+	/** The FP socket or bone with which the weapon will be attached to the character's hand */
 	UPROPERTY(EditDefaultsOnly, Category = "Required")
-	FName WeaponAttachmentSocketName;
+	FName FP_WeaponAttachmentSocketName;
+
+	/** The TP socket or bone with which the weapon will be attached to the character's hand */
+	UPROPERTY(EditDefaultsOnly, Category = "Required")
+	FName TP_WeaponAttachmentSocketName;
 
 	/** The distance the shot will travel */
 	UPROPERTY(EditDefaultsOnly, Category = "Required")
@@ -435,13 +459,21 @@ struct FStaticWeaponData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
 	UAnimSequence *WeaponIdle;
 
-	/** The player's empty reload animation */
+	/** The player's FP empty reload animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
-	UAnimMontage *EmptyPlayerReload;
+	UAnimMontage *FP_EmptyPlayerReload;
 
-	/** The player's reload animation */
+	/** The player's TP empty reload animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
-	UAnimMontage *PlayerReload;
+	UAnimMontage *TP_EmptyPlayerReload;
+
+	/** The player's FP reload animation */
+	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+	UAnimMontage *FP_PlayerReload;
+
+	/** The player's TP reload animation */
+	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+	UAnimMontage *TP_PlayerReload;
 
 	/** The player's inspect animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
@@ -463,21 +495,37 @@ struct FStaticWeaponData : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
 	UAnimSequence *ShotGun_Shot2;
 
-	/** The shooting animation for the Player */
+	/** The FP shooting animation for the Player */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
-	UAnimMontage *Player_Shot;
+	UAnimMontage *FP_Player_Shot;
 
-	/** The ADS shooting animation for the Player */
+	/** The TP shooting animation for the Player */
+	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+	UAnimMontage *TP_Player_Shot;
+
+	/** The FP ADS shooting animation for the Player */
     UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
-    UAnimMontage *Player_ADS_Shot;
+    UAnimMontage *FP_Player_ADS_Shot;
 
-	/** An override for the player's reload animation */
-	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
-	UAnimMontage *WeaponEquip;
+	/** The TP ADS shooting animation for the Player */
+    UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+    UAnimMontage *TP_Player_ADS_Shot;
 
-	/** An override for the player's reload animation */
+	/** An override for the player's FP equip animation */
 	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
-	UAnimMontage *WeaponUnequip;
+	UAnimMontage *FP_WeaponEquip;
+
+	/** An override for the player's TP equip animation */
+	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+	UAnimMontage *TP_WeaponEquip;
+
+	/** An override for the player's FP unequip animation */
+	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+	UAnimMontage *FP_WeaponUnequip;
+
+	/** An override for the player's TP unequip animation */
+	UPROPERTY(EditDefaultsOnly, Category = "Unique Weapon (No Attachments)")
+	UAnimMontage *TP_WeaponUnequip;
 
 	/** Firing Mechanisms */
 
@@ -1049,7 +1097,10 @@ private:
 	/** Local instances of animations for use in AnimBP (Set from WeaponData and/or Attachments) */
 
 	UPROPERTY()
-	UAnimMontage *WeaponEquip;
+	UAnimMontage *FP_WeaponEquip;
+
+	UPROPERTY()
+	UAnimMontage *TP_WeaponEquip;
 
 	UPROPERTY()
 	UBlendSpace *WalkBlendSpace;
@@ -1085,10 +1136,16 @@ private:
 	UAnimSequence *WeaponIdle;
 
 	UPROPERTY()
-	UAnimMontage *EmptyPlayerReload;
+	UAnimMontage *FP_EmptyPlayerReload;
 
 	UPROPERTY()
-	UAnimMontage *PlayerReload;
+	UAnimMontage *TP_EmptyPlayerReload;
+
+	UPROPERTY()
+	UAnimMontage *FP_PlayerReload;
+
+	UPROPERTY()
+	UAnimMontage *TP_PlayerReload;
 
 #pragma endregion
 };
