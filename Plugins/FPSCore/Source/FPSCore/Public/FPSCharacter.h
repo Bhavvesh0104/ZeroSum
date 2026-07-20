@@ -223,6 +223,11 @@ protected:
 	void Multi_VaultTimelineTick(const float DeltaTime);
 	void Multi_VaultTimelineTick_Implementation(const float DeltaTime);
 
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_SlideAnim();
+	bool Server_SlideAnim_Validate();
+	void Server_SlideAnim_Implementation();
+
 	UFUNCTION(NetMultiCast, Reliable)
 	void Multi_SlideAnim();
 	void Multi_SlideAnim_Implementation();
@@ -277,9 +282,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Animations | Montages")
 	UAnimMontage *VaultMontage;
 
-	/** Slide montage */
-	UPROPERTY(EditDefaultsOnly, Category = "Animations | Montages")
-	UAnimMontage *SlideMontage;
+	/** FP Slide montage */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Animations | Montages")
+	UAnimMontage *FP_SlideMontage;
+
+	/** TP Slide montage */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Animations | Montages")
+	UAnimMontage *TP_SlideMontage;
 
 private:
 #pragma region FUNCTIONS

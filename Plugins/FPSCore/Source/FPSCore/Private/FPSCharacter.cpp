@@ -306,16 +306,49 @@ void AFPSCharacter::StartSlide()
     bIsSliding = true;
     bPerformedSlide = true;
     UpdateMovementState(EMovementState::State_Slide);
+    
+    // Play locally for instant client responsiveness
     Multi_SlideAnim();
+    
+    // Explicitly route the animation request to the Server
+    if (!HasAuthority())
+    {
+        Server_SlideAnim();
+    }
+
     GetWorldTimerManager().SetTimer(SlideStop, this, &AFPSCharacter::StopSlide, SlideTime, false, SlideTime);
     GetWorldTimerManager().SetTimer(SlideTimeOutHandler, this, &AFPSCharacter::TimeOutSlide, SlideTimeOut, false, SlideTimeOut);
     bCanSlide = false;
 }
 
+bool AFPSCharacter::Server_SlideAnim_Validate()
+{
+    return true; // Authorizes the Client's RPC execution
+}
+
+void AFPSCharacter::Server_SlideAnim_Implementation()
+{
+    // Server receives the RPC from the Client and broadcasts it to all other machines (and plays it locally for the Host)
+    Multi_SlideAnim();
+}
+
 void AFPSCharacter::Multi_SlideAnim_Implementation()
 {
-    HandsMeshComp->GetAnimInstance()->Montage_Play(SlideMontage, 1.0f);
-    ThirdPersonMesh->GetAnimInstance()->Montage_Play(SlideMontage, 1.0f);
+    if (FP_SlideMontage && HandsMeshComp->GetAnimInstance())
+    {
+        HandsMeshComp->GetAnimInstance()->Montage_Play(FP_SlideMontage, 1.0f);
+    }
+    
+    if (TP_SlideMontage && ThirdPersonMesh->GetAnimInstance())
+    {
+        ThirdPersonMesh->GetAnimInstance()->Montage_Play(TP_SlideMontage, 1.0f);
+    }
+    
+    // Play on the ShadowMesh to ensure the local dynamic shadow also slides
+    if (TP_SlideMontage && ShadowMesh->GetAnimInstance())
+    {
+        ShadowMesh->GetAnimInstance()->Montage_Play(TP_SlideMontage, 1.0f);
+    }
 }
 
 void AFPSCharacter::TimeOutSlide()
