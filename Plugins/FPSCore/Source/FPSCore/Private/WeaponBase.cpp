@@ -40,26 +40,31 @@ AWeaponBase::AWeaponBase()
     TPMeshComp->CastShadow = true;
     TPMeshComp->SetupAttachment(RootComponent);
 
-    // Creating the skeletal meshes for our attachments and making sure that they don't cast shadows
+    // Creating the skeletal meshes for our attachments ,making sure that they don't cast shadows and setting onlyownersee to true
 
     BarrelAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BarrelAttachment"));
     BarrelAttachment->CastShadow = false;
+    BarrelAttachment->SetOnlyOwnerSee(true);
     BarrelAttachment->SetupAttachment(MeshComp);
 
     MagazineAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("MagazineAttachment"));
     MagazineAttachment->CastShadow = false;
+    MagazineAttachment->SetOnlyOwnerSee(true);
     MagazineAttachment->SetupAttachment(MeshComp, FName("Magazine"));
 
     SightsAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SightsAttachment"));
     SightsAttachment->CastShadow = false;
+    SightsAttachment->SetOnlyOwnerSee(true);
     SightsAttachment->SetupAttachment(MeshComp);
 
     StockAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("StockAttachment"));
     StockAttachment->CastShadow = false;
+    StockAttachment->SetOnlyOwnerSee(true);
     StockAttachment->SetupAttachment(MeshComp);
 
     GripAttachment = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("GripAttachment"));
     GripAttachment->CastShadow = false;
+    GripAttachment->SetOnlyOwnerSee(true);
     GripAttachment->SetupAttachment(MeshComp);
 }
 
