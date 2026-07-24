@@ -1121,6 +1121,8 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputCompon
         {
             // Move forward/back + left/right inputs
             PlayerEnhancedInputComponent->BindAction(MovementAction, ETriggerEvent::Triggered, this, &AFPSCharacter::Move);
+            // Fire once when WASD is fully released to trigger the Idle state
+            PlayerEnhancedInputComponent->BindAction(MovementAction, ETriggerEvent::Completed, this, &AFPSCharacter::Move);
         }
 
         if (LookAction)
