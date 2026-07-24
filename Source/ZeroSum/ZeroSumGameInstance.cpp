@@ -7,6 +7,7 @@
 void UZeroSumGameInstance::Init()
 {
 	Super::Init();
+
 	if (IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get())
 	{
 		SessionInterface = Subsystem->GetSessionInterface();
@@ -44,6 +45,9 @@ void UZeroSumGameInstance::CreateSessionInternal()
 	SessionSettings.bShouldAdvertise = true;
 	SessionSettings.bUsesPresence = true;
 	SessionSettings.bUseLobbiesIfAvailable = true;
+
+	// Inject the custom username into the Session Settings payload
+	SessionSettings.Set(FName("HostUsername"), PlayerUsername, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	SessionInterface->CreateSession(0, FName("ZeroSumSession"), SessionSettings);
 }
@@ -94,7 +98,17 @@ void UZeroSumGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 				FZeroSumSessionInfo SessionInfo;
 				SessionInfo.SessionIndex = i;
 				SessionInfo.Ping = Result.PingInMs;
-				SessionInfo.SessionName = Result.Session.OwningUserName.IsEmpty() ? "ZeroSum Match" : Result.Session.OwningUserName;
+
+				// Extract the custom username from the Session Settings
+				FString HostName;
+				if (Result.Session.SessionSettings.Get(FName("HostUsername"), HostName))
+				{
+					SessionInfo.SessionName = HostName;
+				}
+				else
+				{
+					SessionInfo.SessionName = Result.Session.OwningUserName.IsEmpty() ? "ZeroSum Match" : Result.Session.OwningUserName;
+				}
 
 				SessionList.Add(SessionInfo);
 			}
@@ -128,5 +142,13 @@ void UZeroSumGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoinSessi
 				PC->ClientTravel(ConnectInfo, TRAVEL_Absolute);
 			}
 		}
+	}
+}
+
+void UZeroSumGameInstance::PushUsernameToServer(APlayerController* PC)
+{
+	if (PC && PC->IsLocalController())
+	{
+		PC->ServerChangeName(PlayerUsername);
 	}
 }

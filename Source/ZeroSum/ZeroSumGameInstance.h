@@ -2,6 +2,9 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "Online/OnlineSessionNames.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/PlayerController.h"
 #include "ZeroSumGameInstance.generated.h"
 
 USTRUCT(BlueprintType)
@@ -29,6 +32,9 @@ class ZEROSUM_API UZeroSumGameInstance : public UGameInstance
 public:
 	virtual void Init() override;
 
+	UPROPERTY(BlueprintReadWrite, Category = "Network")
+	FString PlayerUsername = TEXT("DefaultUser");
+
 	UFUNCTION(BlueprintCallable, Category = "Network")
 	void HostGame();
 
@@ -37,6 +43,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Network")
 	void JoinGame(int32 SessionIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Network")
+	void PushUsernameToServer(APlayerController* PC);
 
 	UPROPERTY(BlueprintAssignable, Category = "Network")
 	FOnSessionsFoundDelegate OnSessionsFound;
@@ -52,3 +61,4 @@ protected:
 	void OnFindSessionsComplete(bool bWasSuccessful);
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 };
+

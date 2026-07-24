@@ -6,9 +6,6 @@
 #include "GameFramework/PlayerController.h"
 #include "ZeroSumPlayerController.generated.h"
 
-/**
- * 
- */
 UCLASS()
 class ZEROSUM_API AZeroSumPlayerController : public APlayerController
 {
