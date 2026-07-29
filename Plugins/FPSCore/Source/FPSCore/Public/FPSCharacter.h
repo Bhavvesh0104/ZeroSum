@@ -10,6 +10,7 @@
 #include "WeaponBase.h"
 #include "Components/InventoryComponent.h"
 #include "Components/TimelineComponent.h"
+#include "Components/HealthComponent.h"
 #include "GameFramework/Character.h"
 #include "FPSCharacter.generated.h"
 
@@ -152,6 +153,10 @@ public:
 
 	/** Returns the Inventory Component */
 	UInventoryComponent *GetInventoryComponent() const { return InventoryComponent; }
+
+	/** Returns the Health Component */
+	UFUNCTION(BlueprintPure, Category = "FPS Character")
+	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
 
 	UFUNCTION(BlueprintCallable, Category = "FPS Character")
 	void UpdateFOVOffset(const float NewOffset) { FOVOffset = NewOffset; }
@@ -571,6 +576,10 @@ private:
 	/** A reference to the player's Inventory Component */
 	UPROPERTY()
 	UInventoryComponent *InventoryComponent;
+
+	/** A reference to the player's Health Component */
+	UPROPERTY()
+	UHealthComponent *HealthComponent;
 
 	FTimerHandle WaitForAnim;
 

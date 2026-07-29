@@ -50,6 +50,13 @@ AFPSCharacter::AFPSCharacter()
     ThirdPersonMesh->bOwnerNoSee = true;
     ThirdPersonMesh->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::KeepRelativeTransform);
 
+    // FORCE COLLISION OVERRIDE
+    ThirdPersonMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    ThirdPersonMesh->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+    
+    // FORCE CAPSULE PASS-THROUGH
+    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Ignore);
+
     // Spawning the FPS shadow mesh component and attaching it to the capsule component
     ShadowMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ShadowMesh"));
     ShadowMesh->CastShadow = true;
@@ -97,6 +104,12 @@ void AFPSCharacter::BeginPlay()
     {
         InventoryComponent = InventoryComp;
         InventoryComponent->GetEquippedWeapons().Reserve(InventoryComponent->GetNumberOfWeaponSlots());
+    }
+
+    // Obtaining our health component
+    if (UHealthComponent *HealthComp = FindComponentByClass<UHealthComponent>())
+    {
+        HealthComponent = HealthComp;
     }
 
     // Updating the crouched Camera height based on the crouched capsule half height
@@ -1166,20 +1179,19 @@ void AFPSCharacter::Fire()
         UpdateMovementState(EMovementState::State_Walk);
     }
 
-    if (HasAuthority())
-    {
-        if (InventoryComponent->GetCurrentWeapon())
-        {
-            FVector CameraLocation = GetCameraComponent()->GetComponentLocation();
-            FRotator CameraRotation = GetCameraComponent()->GetComponentRotation();
-            InventoryComponent->GetCurrentWeapon()->StartFire(CameraLocation, CameraRotation);
-        }
-    }
-    else
+    if (InventoryComponent->GetCurrentWeapon())
     {
         FVector CameraLocation = GetCameraComponent()->GetComponentLocation();
         FRotator CameraRotation = GetCameraComponent()->GetComponentRotation();
-        Server_Fire(CameraLocation, CameraRotation);
+        
+        // Play instantly on the local client for responsive prediction
+        InventoryComponent->GetCurrentWeapon()->StartFire(CameraLocation, CameraRotation);
+        
+        // Tell the server to validate damage and replicate VFX to opponents
+        if (!HasAuthority())
+        {
+            Server_Fire(CameraLocation, CameraRotation);
+        }
     }
 }
 
@@ -1208,16 +1220,13 @@ void AFPSCharacter::StopFire()
         UpdateMovementState(EMovementState::State_Sprint);
     }
 
-    if (HasAuthority())
+    if (InventoryComponent->GetCurrentWeapon())
     {
-        if (InventoryComponent->GetCurrentWeapon())
+        InventoryComponent->GetCurrentWeapon()->StopFire();
+        if (!HasAuthority())
         {
-            InventoryComponent->GetCurrentWeapon()->StopFire();
+            Server_StopFire();
         }
-    }
-    else
-    {
-        Server_StopFire();
     }
 }
 

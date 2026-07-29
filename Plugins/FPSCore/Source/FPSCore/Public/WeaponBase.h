@@ -834,17 +834,23 @@ protected:
 	bool Multi_Fire_Validate(FHitResult HitResult);
 	void Multi_Fire_Implementation(FHitResult HitResult);
 
+	void PlayHitVFX(FHitResult HitResult);
+
 	/** Multicast of the firing function for things that shouldn't run more than once in case of shotguns */
 	UFUNCTION(NetMulticast, Reliable, WithValidation)
 	void Multi_FireOnce();
 	bool Multi_FireOnce_Validate();
 	void Multi_FireOnce_Implementation();
 
+	void PlayFireVFX();
+
 	/** Multicast of the firing function with no bullets */
 	UFUNCTION(NetMulticast, Reliable, WithValidation)
 	void Multi_Fire_NoBullets();
 	bool Multi_Fire_NoBullets_Validate();
 	void Multi_Fire_NoBullets_Implementation();
+
+	void PlayNoBulletsVFX();
 
 	/** Multicast of the Reload function */
 	UFUNCTION(NetMulticast, Reliable, WithValidation)

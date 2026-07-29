@@ -347,8 +347,14 @@ void AWeaponBase::StartFire(FVector CameraLocation, FRotator CameraRotation)
             GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange, TEXT("Started firing sequence"));
         }
 
-        // Simultaneously begins to play the recoil timeline
-        Client_StartRecoil();
+        // Simultaneously begins to play the recoil timeline locally
+        if (AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
+        {
+            if (PlayerCharacter->IsLocallyControlled())
+            {
+                StartRecoil();
+            }
+        }
     }
 }
 
@@ -410,7 +416,14 @@ void AWeaponBase::StopFire()
     // Stops the gun firing (for automatic fire)
     VerticalRecoilTimeline.Stop();
     HorizontalRecoilTimeline.Stop();
-    Client_RecoilRecovery();
+    
+    if (AFPSCharacter* PlayerChar = Cast<AFPSCharacter>(GetOwner()))
+    {
+        if (PlayerChar->IsLocallyControlled())
+        {
+            RecoilRecovery();
+        }
+    }
     ShotsFired = 0;
 
     if (WeaponData.bPreventRapidManualFire && bHasFiredRecently)
@@ -472,15 +485,19 @@ void AWeaponBase::Fire(FVector CameraLocation, FRotator CameraRotation)
             TraceDirection = TraceStartRotation.Vector();
             TraceEnd = TraceStart + (TraceDirection * (WeaponData.bIsShotgun ? WeaponData.ShotgunRange : WeaponData.LengthMultiplier));
 
-            // Applying Recoil to the weapon
-            Client_Recoil();
+            // Applying Recoil to the weapon locally
+            if (PlayerCharacter->IsLocallyControlled())
+            {
+                Recoil();
+            }
 
             EndPoint = TraceEnd;
 
             // Sets the default values for our trace query
             QueryParams.AddIgnoredActor(this);
             QueryParams.AddIgnoredActor(PlayerCharacter);
-            QueryParams.bTraceComplex = true;
+            // Must be false to hit the Physics Asset capsules. True attempts per-poly collision, which Skeletal Meshes ignore.
+            QueryParams.bTraceComplex = false;
             QueryParams.bReturnPhysicalMaterial = true;
 
             // Drawing a line trace based on the parameters calculated previously
@@ -549,14 +566,18 @@ void AWeaponBase::Fire(FVector CameraLocation, FRotator CameraRotation)
                     }
                 }
             }
-            Multi_Fire(Hit);
+            if (HasAuthority()) { Multi_Fire(Hit); } else { PlayHitVFX(Hit); }
         }
-        Multi_FireOnce();
+        if (HasAuthority()) { Multi_FireOnce(); } else { PlayFireVFX(); }
+        
         if (!WeaponData.bAutomaticFire)
         {
             VerticalRecoilTimeline.Stop();
             HorizontalRecoilTimeline.Stop();
-            Client_RecoilRecovery();
+            if (PlayerCharacter->IsLocallyControlled())
+            {
+                RecoilRecovery();
+            }
         }
 
         if (!WeaponData.bIsShotgun)
@@ -610,7 +631,7 @@ void AWeaponBase::Fire(FVector CameraLocation, FRotator CameraRotation)
     }
     else if (bCanFire && !bIsReloading)
     {
-        Multi_Fire_NoBullets();
+        if (HasAuthority()) { Multi_Fire_NoBullets(); } else { PlayNoBulletsVFX(); }
     }
 }
 
@@ -619,6 +640,13 @@ bool AWeaponBase::Multi_Fire_Validate(FHitResult HitResult)
     return true;
 }
 void AWeaponBase::Multi_Fire_Implementation(FHitResult HitResult)
+{
+    AFPSCharacter* Char = Cast<AFPSCharacter>(GetOwner());
+    if (Char && Char->IsLocallyControlled() && !HasAuthority()) return; // Prevent double-VFX on predicting Client
+    PlayHitVFX(HitResult);
+}
+
+void AWeaponBase::PlayHitVFX(FHitResult HitResult)
 {
     FRotator EjectionSpawnVector = FRotator::ZeroRotator;
     EjectionSpawnVector.Yaw = 270.0f;
@@ -664,6 +692,13 @@ bool AWeaponBase::Multi_FireOnce_Validate()
     return true;
 }
 void AWeaponBase::Multi_FireOnce_Implementation()
+{
+    AFPSCharacter* Char = Cast<AFPSCharacter>(GetOwner());
+    if (Char && Char->IsLocallyControlled() && !HasAuthority()) return; // Prevent double-VFX on predicting Client
+    PlayFireVFX();
+}
+
+void AWeaponBase::PlayFireVFX()
 {
     // Playing an animation on the weapon mesh
     if (!WeaponData.bIsShotgun)
@@ -741,6 +776,13 @@ bool AWeaponBase::Multi_Fire_NoBullets_Validate()
     return true;
 }
 void AWeaponBase::Multi_Fire_NoBullets_Implementation()
+{
+    AFPSCharacter* Char = Cast<AFPSCharacter>(GetOwner());
+    if (Char && Char->IsLocallyControlled() && !HasAuthority()) return; // Prevent double-VFX on predicting Client
+    PlayNoBulletsVFX();
+}
+
+void AWeaponBase::PlayNoBulletsVFX()
 {
     UGameplayStatics::PlaySoundAtLocation(GetWorld(), WeaponData.EmptyFireSound, MeshComp->GetSocketLocation(WeaponData.MuzzleLocation));
     // Clearing the ShotDelay timer so that we don't have a constant ticking when the player has no ammo, just a single click
