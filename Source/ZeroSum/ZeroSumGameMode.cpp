@@ -96,8 +96,6 @@ void AZeroSumGameMode::OnPlayerHealthChanged(UHealthComponent* HealthComponent, 
 			}
 		}
 		
-		VictimPawn->Destroy();
-
 		// Either end the match, or respawn the victim
 		if (bMatchWon)
 		{
@@ -105,6 +103,7 @@ void AZeroSumGameMode::OnPlayerHealthChanged(UHealthComponent* HealthComponent, 
 		}
 		else
 		{
+			VictimPawn->Destroy();
 			FTimerHandle RespawnHandle;
 			FTimerDelegate RespawnDelegate = FTimerDelegate::CreateUObject(this, &AZeroSumGameMode::RespawnPlayer, VictimController);
 			GetWorldTimerManager().SetTimer(RespawnHandle, RespawnDelegate, 3.0f, false);

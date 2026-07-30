@@ -24,7 +24,13 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Events")
 	FOnHealthChangedSignature OnHealthChanged;
 	
+	/** Returns the current health */
+	UFUNCTION(BlueprintPure, Category = "Health Component")
+	float GetHealth() const { return Health; }
+	
 protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	/** Called when the game starts */
 	virtual void BeginPlay() override;
 
@@ -33,7 +39,11 @@ protected:
 	float DefaultHealth = 100.0f;
 
 	/** The current active health */
+	UPROPERTY(ReplicatedUsing = OnRep_Health, BlueprintReadOnly, Category = "Health Component")
 	float Health = 100.0f;
+
+	UFUNCTION()
+	void OnRep_Health(float OldHealth);
 
 	/** The function that handles taking damage, signature is the same as OnTakeAnyDamage */
 	UFUNCTION()
