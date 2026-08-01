@@ -28,4 +28,15 @@ public:
 
 	void AddKill();
 	void AddDeath();
+
+	// New Lobby RPCs
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_SetLobbyReadyStatus(bool bIsReady);
+
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_UpdateLobbyMapSelection(const FString& MapName);
+
+	// Force-feeds the final score to the local GameInstance
+	UFUNCTION(Client, Reliable)
+	void Client_SyncFinalScore(const FString& WinnerName, int32 HostScore, int32 ClientScore, const FString& FinalHostName, const FString& FinalClientName);
 };

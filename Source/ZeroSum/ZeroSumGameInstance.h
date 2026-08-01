@@ -47,12 +47,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Network")
 	void PushUsernameToServer(APlayerController* PC);
 
+	UFUNCTION(BlueprintCallable, Category = "Network")
+	void LeaveGame();
+
 	UPROPERTY(BlueprintAssignable, Category = "Network")
 	FOnSessionsFoundDelegate OnSessionsFound;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Match Results Memory")
+	bool bHasPreviousMatchData = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Match Results Memory")
+	FString LastWinnerName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Match Results Memory")
+	int32 LastHostScore = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Match Results Memory")
+	int32 LastClientScore = 0;
+
+	UFUNCTION(BlueprintCallable, Category = "Match Results Memory")
+	void ClearMatchData() { bHasPreviousMatchData = false; SavedHostName = TEXT(""); SavedClientName = TEXT(""); }
+
+	UPROPERTY(BlueprintReadWrite, Category = "Match Data")
+	FString SavedHostName = TEXT("");
+
+	UPROPERTY(BlueprintReadWrite, Category = "Match Data")
+	FString SavedClientName = TEXT("");
 
 protected:
 	IOnlineSessionPtr SessionInterface;
 	TSharedPtr<class FOnlineSessionSearch> SessionSearch;
+	
+	bool bWantsToHost = false;
 
 	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);

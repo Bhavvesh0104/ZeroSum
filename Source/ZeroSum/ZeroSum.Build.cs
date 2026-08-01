@@ -8,7 +8,7 @@ public class ZeroSum : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
          
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "OnlineSubsystem", "OnlineSubsystemUtils", "FPSCore" });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "OnlineSubsystem", "OnlineSubsystemUtils", "FPSCore", "Slate", "SlateCore"});
 
         PrivateDependencyModuleNames.AddRange(new string[] { "OnlineSubsystemNull" });
     }

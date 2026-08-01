@@ -23,6 +23,8 @@ void UZeroSumGameInstance::Init()
 
 void UZeroSumGameInstance::HostGame()
 {
+	bWantsToHost = true; 
+
 	if (SessionInterface.IsValid())
 	{
 		auto ExistingSession = SessionInterface->GetNamedSession(FName("ZeroSumSession"));
@@ -54,9 +56,27 @@ void UZeroSumGameInstance::CreateSessionInternal()
 
 void UZeroSumGameInstance::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	if (bWasSuccessful)
+	if (bWasSuccessful && bWantsToHost)
 	{
 		CreateSessionInternal();
+	}
+	bWantsToHost = false;
+}
+
+void UZeroSumGameInstance::LeaveGame()
+{
+	bWantsToHost = false; 
+
+	if (SessionInterface.IsValid())
+	{
+		SessionInterface->DestroySession(FName("ZeroSumSession"));
+	}
+
+	ClearMatchData();
+
+	if (APlayerController* PC = GetFirstLocalPlayerController())
+	{
+		PC->ClientTravel("/Game/ZeroSum/Maps/L_MainMenu", TRAVEL_Absolute);
 	}
 }
 
@@ -66,7 +86,8 @@ void UZeroSumGameInstance::OnCreateSessionComplete(FName SessionName, bool bWasS
 	{
 		if (UWorld* World = GetWorld())
 		{
-			World->ServerTravel("/Game/ZeroSum/Maps/L_Arena?listen");
+			// Reroute all new sessions directly to the Lobby map
+			World->ServerTravel("/Game/ZeroSum/Maps/L_Lobby?listen");
 		}
 	}
 }

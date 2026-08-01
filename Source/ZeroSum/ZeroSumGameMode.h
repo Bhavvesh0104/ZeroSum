@@ -24,7 +24,9 @@ protected:
 	void MatchTick();
 	void EndMatch(AZeroSumPlayerState* Winner);
 	void RespawnPlayer(AController* TargetController);
-	void ReturnToMainMenu();
+	
+	void TriggerPostMatchWait();
+	void ReturnToLobby();
 
 	UFUNCTION()
 	void OnPlayerHealthChanged(UHealthComponent* HealthComponent, float Health, float HealthDelta, const class UDamageType* DamageType, class AController* InstigatedBy, AActor* DamageCauser);

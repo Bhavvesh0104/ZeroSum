@@ -1,6 +1,7 @@
 #include "ZeroSumGameMode.h"
 #include "ZeroSumGameState.h"
 #include "ZeroSumPlayerState.h"
+#include "ZeroSumGameInstance.h"
 #include "Components/HealthComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -51,6 +52,12 @@ void AZeroSumGameMode::RestartPlayer(AController* NewPlayer)
 
 void AZeroSumGameMode::OnPlayerHealthChanged(UHealthComponent* HealthComponent, float Health, float HealthDelta, const UDamageType* DamageType, AController* InstigatedBy, AActor* DamageCauser)
 {
+	// Lock the score and prevent deaths if the match timer has already ended
+	if (AZeroSumGameState* GS = GetGameState<AZeroSumGameState>())
+	{
+		if (GS->bMatchEnded) return; 
+	}
+
 	if (Health <= 0.0f)
 	{
 		AActor* DeadActor = HealthComponent->GetOwner();
@@ -85,25 +92,22 @@ void AZeroSumGameMode::OnPlayerHealthChanged(UHealthComponent* HealthComponent, 
 			VictimPS->AddDeath();
 		}
 
-		// Clear Attached Weapons & Destroy Character
+		// Destroy defeated pawn and associated attachments
 		TArray<AActor*> AttachedActors;
 		VictimPawn->GetAttachedActors(AttachedActors);
 		for (AActor* AttachedActor : AttachedActors)
 		{
-			if (AttachedActor)
-			{
-				AttachedActor->Destroy();
-			}
+			if (AttachedActor) AttachedActor->Destroy();
 		}
+		VictimPawn->Destroy();
 		
-		// Either end the match, or respawn the victim
+		// Evaluate match progression state
 		if (bMatchWon)
 		{
 			EndMatch(WinnerPS);
 		}
 		else
 		{
-			VictimPawn->Destroy();
 			FTimerHandle RespawnHandle;
 			FTimerDelegate RespawnDelegate = FTimerDelegate::CreateUObject(this, &AZeroSumGameMode::RespawnPlayer, VictimController);
 			GetWorldTimerManager().SetTimer(RespawnHandle, RespawnDelegate, 3.0f, false);
@@ -123,58 +127,80 @@ void AZeroSumGameMode::EndMatch(AZeroSumPlayerState* Winner)
 {
 	GetWorldTimerManager().ClearTimer(MatchTimerHandle);
 
-	if (!Winner)
+	if (AZeroSumGameState* GS = GetGameState<AZeroSumGameState>())
 	{
-		int32 HighestKills = -1;
+		// Calculate final score from replicated states
+		int32 HScore = 0;
+		int32 CScore = 0;
+		
+		if (GS->PlayerArray.IsValidIndex(0)) HScore = Cast<AZeroSumPlayerState>(GS->PlayerArray[0])->Kills;
+		if (GS->PlayerArray.IsValidIndex(1)) CScore = Cast<AZeroSumPlayerState>(GS->PlayerArray[1])->Kills;
+
+		// Resolve timer expiration conditions
+		if (!Winner)
+		{
+			if (HScore > CScore)
+			{
+				Winner = Cast<AZeroSumPlayerState>(GS->PlayerArray[0]);
+			}
+			else if (CScore > HScore)
+			{
+				Winner = Cast<AZeroSumPlayerState>(GS->PlayerArray[1]);
+			}
+		}
+
+		GS->MatchWinner = Winner;
+		GS->bMatchEnded = true;
+
+		// Assign final match display string
+		FString WName = Winner ? Winner->GetPlayerName() : TEXT("Match Tied!");
+
+		// Retrieve authoritative participant names
+		FString HName = TEXT("Host");
+		FString CName = TEXT("Client");
+		if (GS->PlayerArray.IsValidIndex(0)) HName = GS->PlayerArray[0]->GetPlayerName();
+		if (GS->PlayerArray.IsValidIndex(1)) CName = GS->PlayerArray[1]->GetPlayerName();
+
+		// Replicate final statistics to local instances before ServerTravel
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (APlayerController* PC = It->Get())
 			{
 				if (AZeroSumPlayerState* PS = PC->GetPlayerState<AZeroSumPlayerState>())
 				{
-					if (PS->Kills > HighestKills)
-					{
-						HighestKills = PS->Kills;
-						Winner = PS;
-					}
+					PS->Client_SyncFinalScore(WName, HScore, CScore, HName, CName);
 				}
 			}
 		}
+
+		GS->OnRep_MatchEnded(); 
 	}
 
-	if (Winner)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ZERO SUM MATCH ENDED. WINNER: %s"), *Winner->GetPlayerName());
-	}
+	// Winner gets 2 seconds to move and act
+	FTimerHandle WinnerDanceTimer;
+	GetWorldTimerManager().SetTimer(WinnerDanceTimer, this, &AZeroSumGameMode::TriggerPostMatchWait, 2.0f, false);
+}
 
+void AZeroSumGameMode::TriggerPostMatchWait()
+{
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (APlayerController* PC = It->Get())
 		{
 			if (APawn* Pawn = PC->GetPawn())
 			{
+				// Freeze player input state
 				Pawn->DisableInput(PC);
-
-				// Clear Attached Weapons & Destroy Character for all remaining players
-				TArray<AActor*> AttachedActors;
-				Pawn->GetAttachedActors(AttachedActors);
-				for (AActor* AttachedActor : AttachedActors)
-				{
-					if (AttachedActor)
-					{
-						AttachedActor->Destroy();
-					}
-				}
-				Pawn->Destroy();
 			}
 		}
 	}
 
-	FTimerHandle PostMatchTimer;
-	GetWorldTimerManager().SetTimer(PostMatchTimer, this, &AZeroSumGameMode::ReturnToMainMenu, 2.0f, false);
+	// Trigger map transition delay
+	FTimerHandle ReturnToLobbyTimer;
+	GetWorldTimerManager().SetTimer(ReturnToLobbyTimer, this, &AZeroSumGameMode::ReturnToLobby, 2.0f, false);
 }
 
-void AZeroSumGameMode::ReturnToMainMenu()
+void AZeroSumGameMode::ReturnToLobby()
 {
-	GetWorld()->ServerTravel("/Game/ZeroSum/Maps/L_MainMenu");
+	GetWorld()->ServerTravel("/Game/ZeroSum/Maps/L_Lobby?listen");
 }
