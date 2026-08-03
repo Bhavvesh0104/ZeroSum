@@ -100,6 +100,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FPS Character")
 	bool IsPlayerAiming() const { return bIsAiming; }
 
+	/** Returns whether the player wants to fire */
+	UFUNCTION(BlueprintPure, Category = "FPS Character")
+	bool GetWantsToFire() const { return bWantsToFire; }
+
 	/** Returns the character's current movement state */
 	UFUNCTION(BlueprintPure, Category = "FPS Character")
 	EMovementState GetMovementState() const { return MovementState; }
@@ -483,6 +487,9 @@ private:
 
 	/** Whether the player is holding down the aim down sights button */
 	bool bWantsToAim;
+
+	/** Whether the player is holding down the fire button */
+	bool bWantsToFire = false;
 
 	/** Whether the player is holding down the sprint key */
 	bool bWantsToSprint;

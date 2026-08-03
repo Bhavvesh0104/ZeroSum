@@ -1173,6 +1173,7 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputCompon
 
 void AFPSCharacter::Fire()
 {
+    bWantsToFire = true;
     bRestrictingSprint = true;
     if (MovementState == EMovementState::State_Sprint)
     {
@@ -1181,16 +1182,17 @@ void AFPSCharacter::Fire()
 
     if (InventoryComponent->GetCurrentWeapon())
     {
-        FVector CameraLocation = GetCameraComponent()->GetComponentLocation();
-        FRotator CameraRotation = GetCameraComponent()->GetComponentRotation();
-        
-        // Play instantly on the local client for responsive prediction
-        InventoryComponent->GetCurrentWeapon()->StartFire(CameraLocation, CameraRotation);
-        
-        // Tell the server to validate damage and replicate VFX to opponents
-        if (!HasAuthority())
+        if (InventoryComponent->GetCurrentWeapon()->CanFire() && !InventoryComponent->GetCurrentWeapon()->IsReloading())
         {
-            Server_Fire(CameraLocation, CameraRotation);
+            FVector CameraLocation = GetCameraComponent()->GetComponentLocation();
+            FRotator CameraRotation = GetCameraComponent()->GetComponentRotation();
+            
+            InventoryComponent->GetCurrentWeapon()->StartFire(CameraLocation, CameraRotation);
+            
+            if (!HasAuthority())
+            {
+                Server_Fire(CameraLocation, CameraRotation);
+            }
         }
     }
 }
@@ -1210,6 +1212,7 @@ void AFPSCharacter::Server_Fire_Implementation(FVector CameraLocation, FRotator 
 
 void AFPSCharacter::StopFire()
 {
+    bWantsToFire = false;
     bRestrictingSprint = false;
     
     // Automatically resume sprint if the player is still holding the key, moving safely, and not aiming
@@ -1279,6 +1282,18 @@ void AFPSCharacter::Client_CompleteReload_Implementation()
     if (bHoldingSprint && !bAngleRestrictsSprint && !bWantsToAim && (ForwardVelocity != 0 || RightVelocity != 0))
     {
         UpdateMovementState(EMovementState::State_Sprint);
+    }
+
+    if (InventoryComponent && InventoryComponent->GetCurrentWeapon())
+    {
+        InventoryComponent->GetCurrentWeapon()->SetCanFire(true);
+        InventoryComponent->GetCurrentWeapon()->SetIsReloading(false);
+    }
+
+    // Safely resume firing on the Client now that reload state is definitively cleared
+    if (bWantsToFire)
+    {
+        Fire();
     }
 }
 

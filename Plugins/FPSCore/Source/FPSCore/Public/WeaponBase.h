@@ -739,6 +739,9 @@ public:
 	/** Whether the weapon is currently in it's reload state */
 	bool IsReloading() const { return bIsReloading; }
 
+	/** Update the weapon's reload state */
+	void SetIsReloading(const bool bNewReloading) { bIsReloading = bNewReloading; }
+	
 	/** Update the weapon's recovery behaviour
 	 *	@param bNewShouldRecover Whether the weapon should recover from recoil or not
 	 */

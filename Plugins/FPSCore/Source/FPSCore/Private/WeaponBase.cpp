@@ -189,6 +189,7 @@ void AWeaponBase::OnRep_GeneralWeaponData()
 {
     SpawnAttachments();
 }
+
 void AWeaponBase::SetTPAttachment()
 {
     if (AFPSCharacter *CurrentPlayer = Cast<AFPSCharacter>(GetOwner()))
@@ -506,9 +507,11 @@ void AWeaponBase::Fire(FVector CameraLocation, FRotator CameraRotation)
                 // Drawing debug line trace
                 if (bShowDebug)
                 {
+                    USkeletalMeshComponent* TraceMesh = (WeaponData.bHasAttachments && BarrelAttachment->DoesSocketExist(WeaponData.MuzzleLocation)) ? BarrelAttachment : MeshComp;
+
                     // Debug line from muzzle to hit location
                     DrawDebugLine(
-                        GetWorld(), (WeaponData.bHasAttachments ? BarrelAttachment->GetSocketLocation(WeaponData.MuzzleLocation) : MeshComp->GetSocketLocation(WeaponData.MuzzleLocation)), Hit.Location,
+                        GetWorld(), TraceMesh->GetSocketLocation(WeaponData.MuzzleLocation), Hit.Location,
                         FColor::Red, false, 10.0f, 0.0f, 2.0f);
 
                     if (bDrawObstructiveDebugs)
@@ -555,8 +558,10 @@ void AWeaponBase::Fire(FVector CameraLocation, FRotator CameraRotation)
                 // Drawing debug line trace
                 if (bShowDebug)
                 {
+                    USkeletalMeshComponent* TraceMesh = (WeaponData.bHasAttachments && BarrelAttachment->DoesSocketExist(WeaponData.MuzzleLocation)) ? BarrelAttachment : MeshComp;
+
                     DrawDebugLine(
-                        GetWorld(), (WeaponData.bHasAttachments ? BarrelAttachment->GetSocketLocation(WeaponData.MuzzleLocation) : MeshComp->GetSocketLocation(WeaponData.MuzzleLocation)), TraceEnd,
+                        GetWorld(), TraceMesh->GetSocketLocation(WeaponData.MuzzleLocation), TraceEnd,
                         FColor::Red, false, 10.0f, 0.0f, 2.0f);
 
                     if (bDrawObstructiveDebugs)
@@ -654,17 +659,28 @@ void AWeaponBase::PlayHitVFX(FHitResult HitResult)
 
     EndPoint = HitResult.Location;
 
-    const FRotator ParticleRotation = (EndPoint - (WeaponData.bHasAttachments ? BarrelAttachment->GetSocketLocation(WeaponData.MuzzleLocation) : MeshComp->GetSocketLocation(WeaponData.MuzzleLocation))).Rotation();
+    USkeletalMeshComponent* TargetMuzzleMesh = MeshComp;
+    if (AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
+    {
+        if (PlayerCharacter->IsLocallyControlled())
+        {
+            TargetMuzzleMesh = (WeaponData.bHasAttachments && BarrelAttachment->DoesSocketExist(WeaponData.ParticleSpawnLocation)) ? BarrelAttachment : MeshComp;
+        }
+        else
+        {
+            TargetMuzzleMesh = TPMeshComp;
+        }
+    }
 
-    // Spawning the bullet trace particle effect
-    if (WeaponData.bHasAttachments)
-    {
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), WeaponData.BulletTrace, BarrelAttachment->GetSocketLocation(WeaponData.ParticleSpawnLocation), ParticleRotation);
-    }
-    else
-    {
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), WeaponData.BulletTrace, MeshComp->GetSocketLocation(WeaponData.ParticleSpawnLocation), ParticleRotation);
-    }
+    const FRotator ParticleRotation = (EndPoint - TargetMuzzleMesh->GetSocketLocation(WeaponData.MuzzleLocation)).Rotation();
+
+    // Spawns the bullet trace properly, ignoring if null in the datatable
+    UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+        GetWorld(), 
+        WeaponData.BulletTrace, 
+        TargetMuzzleMesh->GetSocketLocation(WeaponData.ParticleSpawnLocation), 
+        ParticleRotation
+    );
 
     // Selecting the hit effect based on the hit physical surface material (hit.PhysMaterial.Get()) and spawning it (Niagara)
 
@@ -751,13 +767,33 @@ void AWeaponBase::PlayFireVFX()
         }
     }
 
-    if (WeaponData.bHasAttachments)
+    // Determines which mesh to attach the VFX to based on perspective
+    USkeletalMeshComponent* TargetVFXMesh = MeshComp;
+
+    if (AFPSCharacter* PlayerCharacter = Cast<AFPSCharacter>(GetOwner()))
     {
-        UNiagaraFunctionLibrary::SpawnSystemAttached(WeaponData.MuzzleFlash, BarrelAttachment, WeaponData.ParticleSpawnLocation, FVector::ZeroVector, BarrelAttachment->GetSocketRotation(WeaponData.ParticleSpawnLocation), EAttachLocation::SnapToTarget, true);
+        if (PlayerCharacter->IsLocallyControlled())
+        {
+            TargetVFXMesh = (WeaponData.bHasAttachments && BarrelAttachment->DoesSocketExist(WeaponData.ParticleSpawnLocation)) ? BarrelAttachment : MeshComp;
+        }
+        else
+        {
+            TargetVFXMesh = TPMeshComp;
+        }
     }
-    else
+
+    if (TargetVFXMesh)
     {
-        UNiagaraFunctionLibrary::SpawnSystemAttached(WeaponData.MuzzleFlash, MeshComp, WeaponData.ParticleSpawnLocation, FVector::ZeroVector, MeshComp->GetSocketRotation(WeaponData.ParticleSpawnLocation), EAttachLocation::SnapToTarget, true);
+        // Spawns the muzzle flash attached to the designated socket
+        UNiagaraFunctionLibrary::SpawnSystemAttached(
+            WeaponData.MuzzleFlash,
+            TargetVFXMesh,
+            WeaponData.ParticleSpawnLocation,
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            EAttachLocation::SnapToTarget,
+            true
+        );
     }
 
     // Spawning the firing sound
@@ -914,6 +950,9 @@ bool AWeaponBase::Multi_Reload_Validate()
 
 void AWeaponBase::Multi_Reload_Implementation()
 {
+    bCanFire = false;
+	bIsReloading = true;
+
     AFPSCharacter *PlayerCharacter = Cast<AFPSCharacter>(GetOwner());
     if (!PlayerCharacter) return;
 
