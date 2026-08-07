@@ -203,12 +203,13 @@ void AFPSCharacter::ToggleCrouch()
     if (GetCharacterMovement()->IsMovingOnGround())
     {
         float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
-        float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
+        
         if (MovementState == EMovementState::State_Crouch)
         {
             StopCrouch();
         }
-        else if (MovementState == EMovementState::State_Sprint && !bPerformedSlide && bCanSlide && (ForwardVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed || RightVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed))
+        // Strictly enforce forward-biased sliding to maintain tactical momentum
+        else if (MovementState == EMovementState::State_Sprint && !bPerformedSlide && bCanSlide && (ForwardVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed * 0.8f))
         {
             StartSlide();
         }
@@ -869,6 +870,9 @@ void AFPSCharacter::Server_UpdateMovementState_Implementation(const EMovementSta
 // Function that determines the player's maximum speed and other related variables based on movement state
 void AFPSCharacter::UpdateMovementState(const EMovementState NewMovementState)
 {
+    // Prevent Reliable RPC network floods by ignoring redundant state updates
+    if (MovementState == NewMovementState) return;
+
     // Clearing sprinting and crouching flags
     bIsSprinting = false;
     bIsCrouching = false;
@@ -1064,8 +1068,9 @@ void AFPSCharacter::Tick(const float DeltaTime)
     if (GetCharacterMovement()->IsMovingOnGround() && !bPerformedSlide && bWantsToSlide)
     {
         float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
-        float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
-        if (ForwardVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed || RightVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed)
+        
+        // Enforce forward-biased sliding upon landing
+        if (ForwardVelocity > MovementDataMap[EMovementState::State_Walk].MaxWalkSpeed * 0.8f)
         {
             StartSlide();
             bWantsToSlide = false;

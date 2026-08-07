@@ -236,23 +236,11 @@ void UInventoryComponent::UpdateWeapon(AWeaponBase *SpawnedWeapon, const int Inv
 
 FText UInventoryComponent::GetCurrentWeaponRemainingAmmo() const
 {
-	if (const AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
+	if (CurrentWeapon != nullptr)
 	{
-		AFPSCharacterController *CharacterController = Cast<AFPSCharacterController>(FPSCharacter->GetController());
-		if (CharacterController)
-		{
-			if (CurrentWeapon != nullptr)
-			{
-				return FText::AsNumber(CharacterController->AmmoMap[CurrentWeapon->GetRuntimeWeaponData()->AmmoType]);
-			}
-			UE_LOG(LogProfilingDebugging, Log, TEXT("Cannot find Current Weapon"));
-			return FText::AsNumber(0);
-		}
-		UE_LOG(LogProfilingDebugging, Error, TEXT("No character controller found in UInventoryComponent"))
-		return FText::FromString("Err");
+		return FText::AsNumber(CurrentWeapon->GetRuntimeWeaponData()->ClipCapacity);
 	}
-	UE_LOG(LogProfilingDebugging, Error, TEXT("No player character found in UInventoryComponent"))
-	return FText::FromString("Err");
+	return FText::AsNumber(0);
 }
 
 void UInventoryComponent::Inspect()

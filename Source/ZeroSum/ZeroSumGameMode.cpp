@@ -21,7 +21,6 @@ AZeroSumGameMode::AZeroSumGameMode()
 void AZeroSumGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	GetWorldTimerManager().SetTimer(MatchTimerHandle, this, &AZeroSumGameMode::MatchTick, 1.0f, true);
 }
 
 void AZeroSumGameMode::MatchTick()
@@ -36,6 +35,19 @@ void AZeroSumGameMode::MatchTick()
 		{
 			GetWorldTimerManager().ClearTimer(MatchTimerHandle);
 			EndMatch(nullptr); 
+		}
+	}
+}
+
+void AZeroSumGameMode::PostLogin(APlayerController* NewPlayer)
+{
+	Super::PostLogin(NewPlayer);
+
+	if (GetNumPlayers() >= 2)
+	{
+		if (!GetWorldTimerManager().IsTimerActive(MatchTimerHandle))
+		{
+			GetWorldTimerManager().SetTimer(MatchTimerHandle, this, &AZeroSumGameMode::MatchTick, 1.0f, true);
 		}
 	}
 }
