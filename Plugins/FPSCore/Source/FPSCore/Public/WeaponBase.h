@@ -22,7 +22,6 @@ class UBlendSpace;
 class USoundCue;
 class UPhysicalMaterial;
 class UDataTable;
-class AWeaponPickup;
 
 /** Enumerator holding the 4 types of ammunition that weapons can use (used as part of the FSingleWeaponParams struct)
  * and to keep track of the total ammo the player has (ammoMap) */
@@ -371,10 +370,6 @@ struct FStaticWeaponData : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	/**Pickup reference */
-	UPROPERTY(EditDefaultsOnly, Category = "Required")
-	TSubclassOf<AWeaponPickup> PickupReference;
-
 	/** The FP socket or bone with which the weapon will be attached to the character's hand */
 	UPROPERTY(EditDefaultsOnly, Category = "Required")
 	FName FP_WeaponAttachmentSocketName;
@@ -416,6 +411,10 @@ struct FStaticWeaponData : public FTableRowBase
 	/** The table which holds the attachment data */
 	UPROPERTY(EditDefaultsOnly, Category = "Attachments")
 	UDataTable *AttachmentsDataTable;
+
+	// Array of attachment row names to be automatically equipped when this weapon is spawned
+	UPROPERTY(EditDefaultsOnly, Category = "Attachments")
+	TArray<FName> DefaultAttachments;
 
 	/** Animations */
 
@@ -717,8 +716,15 @@ public:
 	/** Stops the timer that allows for automatic fire */
 	void StopFire();
 
-	/** Plays the reload animation and sets a timer based on the length of the reload montage */
 	bool Reload();
+
+	void CancelReload();
+
+	UFUNCTION()
+	void OnLocalReloadEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	UFUNCTION(Server, Reliable)
+	void Server_CancelReload();
 
 	/** Spawns the weapons attachments and applies their data/modifications to the weapon's statistics */
 	void SpawnAttachments();
@@ -821,10 +827,6 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_UnequipWeaponAnim();
 	void Multi_UnequipWeaponAnim_Implementation();
-
-	UFUNCTION(NetMulticast, Reliable)
-	void HandleUnequip(UInventoryComponent *InventoryComponent);
-	void HandleUnequip_Implementation(UInventoryComponent *InventoryComponent);
 
 protected:
 

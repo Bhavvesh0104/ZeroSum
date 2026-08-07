@@ -15,6 +15,8 @@ class AFPSCharacterController : public APlayerController
 	GENERATED_BODY()
 
 public:
+	AFPSCharacterController();
+
 	/** Stored ammo data for the player character */
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory")
 	TMap<EAmmoType, int32> AmmoMap;

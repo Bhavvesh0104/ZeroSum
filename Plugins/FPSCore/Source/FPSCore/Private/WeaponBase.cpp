@@ -98,6 +98,33 @@ void AWeaponBase::BeginPlay()
         GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Red, TEXT("MISSING A WEAPON DATA TABLE NAME REFERENCE"));
     }
 
+    // Self-initialize runtime data if it hasn't been injected yet, guaranteeing full ammo on spawn
+    if (HasAuthority() && GeneralWeaponData.ClipCapacity == 0)
+    {
+        GeneralWeaponData.WeaponClassReference = GetClass();
+        GeneralWeaponData.AmmoType = WeaponData.AmmoToUse;
+        GeneralWeaponData.ClipCapacity = WeaponData.ClipCapacity;
+        GeneralWeaponData.WeaponHealth = 100.0f;
+        GeneralWeaponData.WeaponAttachments = WeaponData.DefaultAttachments;
+
+        if (WeaponData.bHasAttachments && WeaponData.AttachmentsDataTable)
+        {
+            for (FName RowName : GeneralWeaponData.WeaponAttachments)
+            {
+                if (FAttachmentData* AttData = WeaponData.AttachmentsDataTable->FindRow<FAttachmentData>(RowName, RowName.ToString(), true))
+                {
+                    if (AttData->AttachmentType == EAttachmentType::Magazine)
+                    {
+                        GeneralWeaponData.AmmoType = AttData->AmmoToUse;
+                        GeneralWeaponData.ClipCapacity = AttData->ClipCapacity;
+                    }
+                }
+            }
+        }
+        
+        GeneralWeaponData.ClipSize = GeneralWeaponData.ClipCapacity;
+    }
+
     // Setting our default animation values
     // We set these here, but they can be overriden later by variables from applied attachments.
 
@@ -172,6 +199,16 @@ void AWeaponBase::OnRep_Owner()
     {
         MeshComp->AttachToComponent(CurrentPlayer->GetHandsMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, GetStaticWeaponData()->FP_WeaponAttachmentSocketName);
         SetTPAttachment();
+        
+        // Force immediate visibility check against the inventory to prevent secondary weapons from rendering on spawn
+        if (UInventoryComponent* InvComp = CurrentPlayer->FindComponentByClass<UInventoryComponent>())
+        {
+            if (InvComp->GetCurrentWeapon() != this)
+            {
+                SetActorHiddenInGame(true);
+                PrimaryActorTick.bCanEverTick = false;
+            }
+        }
     }
 }
 
@@ -878,6 +915,19 @@ void AWeaponBase::Client_RecoilRecovery_Implementation()
     RecoilRecovery();
 }
 
+void AWeaponBase::CancelReload()
+{
+	if (bIsReloading)
+	{
+		bIsReloading = false;
+		GetWorldTimerManager().ClearTimer(ReloadingDelay);
+		bCanFire = true;
+		
+		if (MeshComp && MeshComp->GetAnimInstance()) MeshComp->GetAnimInstance()->StopAllMontages(0.0f);
+		if (TPMeshComp && TPMeshComp->GetAnimInstance()) TPMeshComp->GetAnimInstance()->StopAllMontages(0.0f);
+	}
+}
+
 bool AWeaponBase::Reload()
 {
     if (!bCanReload)
@@ -977,6 +1027,10 @@ void AWeaponBase::Multi_Reload_Implementation()
         if (TargetMontage && PlayerCharacter->GetHandsMesh()->GetAnimInstance())
         {
             PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(TargetMontage, 1.0f);
+
+            FOnMontageEnded EndDelegate;
+            EndDelegate.BindUObject(this, &AWeaponBase::OnLocalReloadEnded);
+            PlayerCharacter->GetHandsMesh()->GetAnimInstance()->Montage_SetEndDelegate(EndDelegate, TargetMontage);
         }
     }
     else
@@ -1014,42 +1068,14 @@ void AWeaponBase::Multi_UnequipWeaponAnim_Implementation()
 {
     if (AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
     {
-        if (FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->FP_WeaponUnequip)
+        if (FPSCharacter->IsLocallyControlled())
         {
-            if (FPSCharacter->GetHandsMesh()->GetAnimInstance())
-            {
-                FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->FP_WeaponUnequip, 1.0f);
-            }
+            return;
         }
-        else if (!FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->TP_WeaponUnequip)
+        if (GetStaticWeaponData()->TP_WeaponUnequip && FPSCharacter->GetThirdPersonMesh()->GetAnimInstance())
         {
-            if (FPSCharacter->GetThirdPersonMesh()->GetAnimInstance())
-            {
-                FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->TP_WeaponUnequip, 1.0f);
-            }
+            FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->TP_WeaponUnequip, 1.0f);
         }
-    }
-}
-
-void AWeaponBase::HandleUnequip_Implementation(UInventoryComponent *InventoryComponent)
-{
-    if (const AFPSCharacter *FPSCharacter = Cast<AFPSCharacter>(GetOwner()))
-    {
-        FTimerHandle WeaponSwapDelegate;
-        float UnequipAnimTime = 0.1f; // Safe fallback duration
-
-        if (FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->FP_WeaponUnequip)
-        {
-            UnequipAnimTime = FPSCharacter->GetHandsMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->FP_WeaponUnequip, 1.0f);
-        }
-        else if (!FPSCharacter->IsLocallyControlled() && GetStaticWeaponData()->TP_WeaponUnequip)
-        {
-            UnequipAnimTime = FPSCharacter->GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(GetStaticWeaponData()->TP_WeaponUnequip, 1.0f);
-        }
-        
-        Multi_UnequipWeaponAnim();
-        FTimerDelegate TimerDelegate = FTimerDelegate::CreateUObject(InventoryComponent, &UInventoryComponent::UnequipReturn);
-        GetWorld()->GetTimerManager().SetTimer(WeaponSwapDelegate, TimerDelegate, UnequipAnimTime, false, UnequipAnimTime);
     }
 }
 
@@ -1177,4 +1203,21 @@ bool AWeaponBase::Client_HandleRecoveryProgress_Validate(float Value) const
 void AWeaponBase::Client_HandleRecoveryProgress_Implementation(float Value) const
 {
     HandleRecoveryProgress(Value);
+}
+
+void AWeaponBase::OnLocalReloadEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+    if (bInterrupted)
+    {
+        CancelReload();
+        if (!HasAuthority())
+        {
+            Server_CancelReload();
+        }
+    }
+}
+
+void AWeaponBase::Server_CancelReload_Implementation()
+{
+    CancelReload();
 }

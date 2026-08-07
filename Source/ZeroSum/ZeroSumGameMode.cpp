@@ -7,6 +7,10 @@
 #include "GameFramework/Pawn.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "Components/InventoryComponent.h"
+#include "EngineUtils.h"
+#include "FPSCharacter.h"
+#include "WeaponBase.h"
 
 AZeroSumGameMode::AZeroSumGameMode()
 {
@@ -40,12 +44,39 @@ void AZeroSumGameMode::RestartPlayer(AController* NewPlayer)
 {
 	Super::RestartPlayer(NewPlayer);
 
+	// Initialisation of the match loadout to guarantee execution before the first pawn injection
+	// Listen Servers fire RestartPlayer for the Host prior to BeginPlay
+	if (MatchPrimaryWeapon == nullptr && AvailableWeapons.Num() > 0)
+	{
+		MatchPrimaryWeapon = AvailableWeapons[FMath::RandRange(0, AvailableWeapons.Num() - 1)];
+
+		if (AvailableWeapons.Num() > 1)
+		{
+			int32 SecIndex = FMath::RandRange(0, AvailableWeapons.Num() - 1);
+			while (AvailableWeapons[SecIndex] == MatchPrimaryWeapon)
+			{
+				SecIndex = FMath::RandRange(0, AvailableWeapons.Num() - 1);
+			}
+			MatchSecondaryWeapon = AvailableWeapons[SecIndex];
+		}
+		else
+		{
+			MatchSecondaryWeapon = MatchPrimaryWeapon;
+		}
+	}
+
 	if (NewPlayer && NewPlayer->GetPawn())
 	{
 		if (UHealthComponent* HC = NewPlayer->GetPawn()->FindComponentByClass<UHealthComponent>())
 		{
 			HC->OnHealthChanged.RemoveDynamic(this, &AZeroSumGameMode::OnPlayerHealthChanged);
 			HC->OnHealthChanged.AddDynamic(this, &AZeroSumGameMode::OnPlayerHealthChanged);
+		}
+
+		// Inject authoritative loadout directly into the fresh Pawn
+		if (UInventoryComponent* InvComp = NewPlayer->GetPawn()->FindComponentByClass<UInventoryComponent>())
+		{
+			InvComp->InitializeLoadout(MatchPrimaryWeapon, MatchSecondaryWeapon);
 		}
 	}
 }
@@ -129,21 +160,25 @@ void AZeroSumGameMode::EndMatch(AZeroSumPlayerState* Winner)
 
 	if (AZeroSumGameState* GS = GetGameState<AZeroSumGameState>())
 	{
-		// Calculate final score from replicated states
 		int32 HScore = 0;
 		int32 CScore = 0;
 		
-		if (GS->PlayerArray.IsValidIndex(0)) HScore = Cast<AZeroSumPlayerState>(GS->PlayerArray[0])->Kills;
-		if (GS->PlayerArray.IsValidIndex(1)) CScore = Cast<AZeroSumPlayerState>(GS->PlayerArray[1])->Kills;
+		if (GS->PlayerArray.IsValidIndex(0))
+		{
+			if (AZeroSumPlayerState* HostPS = Cast<AZeroSumPlayerState>(GS->PlayerArray[0])) HScore = HostPS->Kills;
+		}
+		if (GS->PlayerArray.IsValidIndex(1))
+		{
+			if (AZeroSumPlayerState* ClientPS = Cast<AZeroSumPlayerState>(GS->PlayerArray[1])) CScore = ClientPS->Kills;
+		}
 
-		// Resolve timer expiration conditions
 		if (!Winner)
 		{
-			if (HScore > CScore)
+			if (HScore > CScore && GS->PlayerArray.IsValidIndex(0))
 			{
 				Winner = Cast<AZeroSumPlayerState>(GS->PlayerArray[0]);
 			}
-			else if (CScore > HScore)
+			else if (CScore > HScore && GS->PlayerArray.IsValidIndex(1))
 			{
 				Winner = Cast<AZeroSumPlayerState>(GS->PlayerArray[1]);
 			}
@@ -203,4 +238,55 @@ void AZeroSumGameMode::TriggerPostMatchWait()
 void AZeroSumGameMode::ReturnToLobby()
 {
 	GetWorld()->ServerTravel("/Game/ZeroSum/Maps/L_Lobby?listen");
+}
+
+void AZeroSumGameMode::Logout(AController* Exiting)
+{
+	if (Exiting)
+	{
+		for (TActorIterator<AWeaponBase> WeaponIt(GetWorld()); WeaponIt; ++WeaponIt)
+		{
+			AFPSCharacter* WeaponOwner = Cast<AFPSCharacter>(WeaponIt->GetOwner());
+			
+			if (!WeaponOwner || WeaponOwner->GetController() == Exiting || WeaponOwner->GetController() == nullptr)
+			{
+				WeaponIt->Destroy();
+			}
+		}
+		for (TActorIterator<AFPSCharacter> PawnIt(GetWorld()); PawnIt; ++PawnIt)
+		{
+			if (PawnIt->GetController() == Exiting || PawnIt->GetController() == nullptr)
+			{
+				PawnIt->Destroy();
+				break; 
+			}
+		}
+	}
+
+	if (AZeroSumGameState* GS = GetGameState<AZeroSumGameState>())
+	{
+		if (!GS->bMatchEnded)
+		{
+			AZeroSumPlayerState* RemainingPlayer = nullptr;
+
+			for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+			{
+				if (APlayerController* PC = It->Get())
+				{
+					if (PC != Exiting)
+					{
+						RemainingPlayer = PC->GetPlayerState<AZeroSumPlayerState>();
+						break;
+					}
+				}
+			}
+
+			if (RemainingPlayer)
+			{
+				EndMatch(RemainingPlayer);
+			}
+		}
+	}
+
+	Super::Logout(Exiting);
 }

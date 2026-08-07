@@ -17,9 +17,18 @@ public:
 	
 	virtual void BeginPlay() override;
 	virtual void RestartPlayer(AController* NewPlayer) override;
+	virtual void Logout(AController* Exiting) override;
+
+public:
+	// Populate this in the Blueprint child class with the available weapon classes
+	UPROPERTY(EditDefaultsOnly, Category = "Match Rules Loadout")
+	TArray<TSubclassOf<class AWeaponBase>> AvailableWeapons;
 
 protected:
 	FTimerHandle MatchTimerHandle;
+	
+	TSubclassOf<class AWeaponBase> MatchPrimaryWeapon;
+	TSubclassOf<class AWeaponBase> MatchSecondaryWeapon;
 	
 	void MatchTick();
 	void EndMatch(AZeroSumPlayerState* Winner);

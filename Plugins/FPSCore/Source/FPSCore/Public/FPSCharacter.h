@@ -108,6 +108,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FPS Character")
 	EMovementState GetMovementState() const { return MovementState; }
 
+	/** Checks if the player can fire in their current movement state */
+	UFUNCTION(BlueprintPure, Category = "FPS Character")
+	bool CanFireInCurrentState() const
+	{
+		if (MovementDataMap.Contains(MovementState))
+		{
+			return MovementDataMap[MovementState].bCanFire;
+		}
+		return true;
+	}
+
 	/** Returns the character's hands mesh */
 	USkeletalMeshComponent *GetHandsMesh() const { return HandsMeshComp; }
 
@@ -179,6 +190,17 @@ public:
 	/** Called by the weapon system when a reload finishes to lift movement restrictions */
 	UFUNCTION(Client, Reliable)
 	void Client_CompleteReload();
+
+	// Triggers Fire if the input key is currently held
+	void ResumeFireInput() { if (bWantsToFire) Fire(); }
+
+	// Updates local weapon visual state and plays the equip montage on the client
+	UFUNCTION(Client, Reliable)
+	void Client_CompleteWeaponSwap(int32 NewSlotId, AWeaponBase* NewWeapon);
+
+	// Unlocks weapon swap state and restores firing permissions on the client
+	UFUNCTION(Client, Reliable)
+	void Client_FinishWeaponSwap();
 
 protected:
 	/** Calling Fire Function */
@@ -627,9 +649,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input | Actions")
 	UInputAction *AimAction;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Input | Actions")
-	UInputAction *InteractAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input | Actions")
 	UInputAction *ScrollAction;

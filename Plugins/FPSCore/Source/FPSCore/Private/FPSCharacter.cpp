@@ -8,7 +8,6 @@
 #include "WeaponBase.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Components/InteractionComponent.h"
 #include "Components/InventoryComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/TimelineComponent.h"
@@ -97,13 +96,6 @@ void AFPSCharacter::BeginPlay()
         FOnTimelineFloat TimelineProgress;
         TimelineProgress.BindUFunction(this, FName("TimelineProgress"));
         VaultTimeline.AddInterpFloat(VaultTimelineCurve, TimelineProgress);
-    }
-
-    // Obtaining our inventory component and reserving space in memory for our set of weapons
-    if (UInventoryComponent *InventoryComp = FindComponentByClass<UInventoryComponent>())
-    {
-        InventoryComponent = InventoryComp;
-        InventoryComponent->GetEquippedWeapons().Reserve(InventoryComponent->GetNumberOfWeaponSlots());
     }
 
     // Obtaining our health component
@@ -415,7 +407,19 @@ void AFPSCharacter::StartAds()
 void AFPSCharacter::StopAds()
 {
     bWantsToAim = false;
-    bRestrictingSprint = false; 
+    bRestrictingSprint = false;
+
+    // Immediately abort the ADS firing montage so the AnimBP can return to the hip-fire blend space
+    if (InventoryComponent && InventoryComponent->GetCurrentWeapon())
+    {
+        if (UAnimMontage* AdsFireMontage = InventoryComponent->GetCurrentWeapon()->GetStaticWeaponData()->FP_Player_ADS_Shot)
+        {
+            if (GetHandsMesh() && GetHandsMesh()->GetAnimInstance())
+            {
+                GetHandsMesh()->GetAnimInstance()->Montage_Stop(0.2f, AdsFireMontage);
+            }
+        }
+    }
     
     float ForwardVelocity = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
     float RightVelocity = FVector::DotProduct(GetVelocity(), GetActorRightVector());
@@ -1039,10 +1043,17 @@ void AFPSCharacter::Tick(const float DeltaTime)
         UE_LOG(LogProfilingDebugging, Error, TEXT("Set up data in MovementDataMap! Fov adjustments"))
     }
 
-    // Continuous aiming check (so that you don't have to re-press the ADS button every time you jump/sprint/reload/etc)
+    // Continuous aiming check evaluating swap states to temporarily suppress the aiming pose during transitions
     if (bWantsToAim == true && MovementState != EMovementState::State_Slide)
     {
-        bIsAiming = true;
+        if (InventoryComponent && InventoryComponent->IsPerformingWeaponSwap())
+        {
+            bIsAiming = false;
+        }
+        else
+        {
+            bIsAiming = true;
+        }
     }
     else
     {
@@ -1099,12 +1110,6 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputCompon
     // Make sure that we are using a UEnhancedInputComponent; if not, the project is not configured correctly.
     if (UEnhancedInputComponent *PlayerEnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
     {
-        if (UInteractionComponent *InteractionComponent = FindComponentByClass<UInteractionComponent>())
-        {
-            InteractionComponent->InteractAction = InteractAction;
-            InteractionComponent->SetupInputComponent(PlayerEnhancedInputComponent);
-        }
-
         if (UInventoryComponent *InventoryComp = FindComponentByClass<UInventoryComponent>())
         {
             InventoryComp->FiringAction = FiringAction;
@@ -1176,11 +1181,13 @@ void AFPSCharacter::Fire()
     bWantsToFire = true;
     bRestrictingSprint = true;
     if (MovementState == EMovementState::State_Sprint)
-    {
-        UpdateMovementState(EMovementState::State_Walk);
-    }
+	{
+		UpdateMovementState(EMovementState::State_Walk);
+	}
 
-    if (InventoryComponent->GetCurrentWeapon())
+	if (InventoryComponent && InventoryComponent->IsPerformingWeaponSwap()) return;
+
+	if (InventoryComponent->GetCurrentWeapon())
     {
         if (InventoryComponent->GetCurrentWeapon()->CanFire() && !InventoryComponent->GetCurrentWeapon()->IsReloading())
         {
@@ -1308,4 +1315,51 @@ void AFPSCharacter::Server_Reload_Implementation()
     {
         InventoryComponent->GetCurrentWeapon()->Reload();
     }
+}
+
+void AFPSCharacter::Client_CompleteWeaponSwap_Implementation(int32 NewSlotId, AWeaponBase* NewWeapon)
+{
+	if (InventoryComponent)
+	{
+		// Force hide ALL equipped weapons except the incoming one to prevent overlapping meshes caused by OnRep race conditions
+		for (auto& Elem : InventoryComponent->EquippedWeapons)
+		{
+			if (Elem.Value && Elem.Value != NewWeapon)
+			{
+				Elem.Value->PrimaryActorTick.bCanEverTick = false;
+				Elem.Value->SetActorHiddenInGame(true);
+			}
+		}
+
+		InventoryComponent->SetCurrentWeaponSlot(NewSlotId);
+		InventoryComponent->ForceCurrentWeapon(NewWeapon);
+
+		if (NewWeapon)
+		{
+			InventoryComponent->EquippedWeapons.Add(NewSlotId, NewWeapon);
+			NewWeapon->PrimaryActorTick.bCanEverTick = true;
+			NewWeapon->SetActorHiddenInGame(false);
+			NewWeapon->SetTPAttachment();
+
+			if (GetHandsMesh() && GetHandsMesh()->GetAnimInstance() && NewWeapon->GetStaticWeaponData()->FP_WeaponEquip)
+			{
+				GetHandsMesh()->GetAnimInstance()->Montage_Play(NewWeapon->GetStaticWeaponData()->FP_WeaponEquip, 1.0f);
+			}
+		}
+	}
+}
+
+void AFPSCharacter::Client_FinishWeaponSwap_Implementation()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->SetPerformingWeaponSwap(false);
+
+		if (AWeaponBase* Weapon = InventoryComponent->GetCurrentWeapon())
+		{
+			Weapon->SetCanFire(CanFireInCurrentState());
+		}
+	}
+
+	ResumeFireInput();
 }

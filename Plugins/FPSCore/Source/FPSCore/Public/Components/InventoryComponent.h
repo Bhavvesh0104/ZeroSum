@@ -8,6 +8,7 @@
 #include "WeaponBase.h"
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
+#include "Animation/AnimTypes.h"
 #include "InventoryComponent.generated.h"
 
 class UCameraComponent;
@@ -32,30 +33,6 @@ enum class EWeaponSwapBehaviour : uint8
 	Ignore UMETA(DisplayName = "Ignore subsequent swaps")
 };
 
-USTRUCT()
-struct FStarterWeaponData
-{
-	UPROPERTY(EditDefaultsOnly, Category = "Data Table")
-	TSubclassOf<AWeaponBase> WeaponClassRef;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Data Table")
-	UDataTable *WeaponDataTableRef;
-
-	/** Data table reference for attachments */
-	UPROPERTY(EditDefaultsOnly, Category = "Data Table")
-	UDataTable *AttachmentsDataTable;
-
-	/** Local weapon data struct to keep track of ammo amounts and weapon health */
-	UPROPERTY()
-	FRuntimeWeaponData DataStruct;
-
-	/** The array of attachments to spawn (usually inherited, can be set by instance) */
-	UPROPERTY(EditDefaultsOnly, Category = "Data Table")
-	TArray<FName> AttachmentArrayOverrideRef;
-
-	GENERATED_BODY()
-};
-
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class FPSCORE_API UInventoryComponent final : public UActorComponent
 {
@@ -70,26 +47,23 @@ public:
 	/** Called to bind functionality to input */
 	void SetupInputComponent(class UEnhancedInputComponent *PlayerInputComponent);
 
-	/** Spawning a new weapon
-	 * @param NewWeapon The new weapon which to spawn
-	 * @param InventoryPosition The position in the player's inventory in which to place the weapon
-	 * @param bSpawnPickup Whether to spawn a pickup of CurrentWeapon (can be false if player has an empty weapon slot)
-	 * @param bStatic Whether the spawned pickup should be static or run a physics simulation
-	 * @param PickupTransform The position at which to spawn the new pickup, in the case that it is static (bStatic)
-	 * @param DataStruct The FRuntimeWeaponData struct for the newly equipped weapon
-	 * @param WeaponOwner The Player who owns the weapon
-	 */
-	void SpawnWeapon(TSubclassOf<AWeaponBase> NewWeapon, const int InventoryPosition, const bool bSpawnPickup,
-					 const bool bStatic, const FTransform PickupTransform, const FRuntimeWeaponData DataStruct);
+	// Spawning a new weapon directly into an inventory slot
+	void SpawnWeapon(TSubclassOf<AWeaponBase> NewWeapon, const int InventoryPosition);
 
 	/** Equipping a new weapon */
-	void UpdateWeapon(AWeaponBase *SpawnedWeapon, const int InventoryPosition);
+	void UpdateWeapon(AWeaponBase *SpawnedWeapon, const int InventoryPosition, bool bPlayAnim = true);
+
+	// Forces immediate local synchronization of the weapon pointer before OnRep arrives
+	void ForceCurrentWeapon(AWeaponBase* NewWeapon) { CurrentWeapon = NewWeapon; }
+
+	void SetPerformingWeaponSwap(bool bIsSwapping) { bPerformingWeaponSwap = bIsSwapping; }
 
 	/** Returns the number of weapon slots */
 	int GetNumberOfWeaponSlots() const { return NumberOfWeaponSlots; }
 
 	/** Returns the currently equipped weapon slot */
 	int GetCurrentWeaponSlot() const { return CurrentWeaponSlot; }
+	void SetCurrentWeaponSlot(int NewSlot) { CurrentWeaponSlot = NewSlot; }
 
 	/** Returns the map of currently equipped weapons */
 	UFUNCTION(BlueprintCallable, Category = "Inventory Component")
@@ -171,10 +145,11 @@ public:
 	/** Reloads the weapon */
 	void Reload();
 
-	/** Starter Weapon Function */
-	void StarterWeapon();
+	// Server authoritative loadout injection
+	void InitializeLoadout(TSubclassOf<AWeaponBase> PrimaryClass, TSubclassOf<AWeaponBase> SecondaryClass);
 
 	void UnequipReturn();
+	void EquipReturn();
 
 private:
 	/** Spawns starter weapons */
@@ -188,25 +163,17 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_CurrentWeapon)
     AWeaponBase *CurrentWeapon;
 	
-	/** Swap to a new weapon
-	 *	@param SlotId The ID of the slot which to swap to
-	 */
 	void SwapWeapon(int SlotId);
 
-	/** Swaps to the weapon in CurrentWeaponSlot */
+	void LocalSwap(int SlotId);
+	void SwapToPrimary();
+	void SwapToSecondary();
 
-	/**	Template function for SwapWeapon (used with the enhanced input component) */
-	template <int SlotID>
-	void SwapWeapon() { SwapWeapon(SlotID); }
-
-	/**	Template function for Server_SwapWeapon (used with the enhanced input component) */
-	template <int SlotID>
-	void Server_SwapWeapon() { Server_SwapWeapon(SlotID); }
+	UFUNCTION(Server, Reliable)
+	void Server_UpdateTargetWeaponSlot(int SlotId);
 
 	/** Swaps between weapons using the scroll wheel */
-	UFUNCTION(Server, Reliable)
 	void ScrollWeapon(const FInputActionValue &Value);
-	void ScrollWeapon_Implementation(const FInputActionValue &Value);
 
 	/** Plays an inspect animation on the weapon */
 	void Inspect();
@@ -235,15 +202,16 @@ private:
 	bool bPerformingWeaponSwap;
 
 	FTimerHandle ReloadRetry;
+	FTimerHandle WeaponSwapTimerHandle;
+
+public:
+	// Returns the current swap state for animation and aiming interruption logic
+	bool IsPerformingWeaponSwap() const { return bPerformingWeaponSwap; }
 
 public:
 	/** THe Number of slots for Weapons that this player has */
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons | Inventory")
 	int NumberOfWeaponSlots = 2;
-
-	/** An array of starter weapons. Only weapons within the range of NumberOfWeaponSlots will be spawned */
-	UPROPERTY(EditDefaultsOnly, Category = "Weapons | Inventory")
-	TArray<FStarterWeaponData> StarterWeapons;
 
 	/** A Map storing the player's current weapons and the slot that they correspond to */
 	UPROPERTY()
