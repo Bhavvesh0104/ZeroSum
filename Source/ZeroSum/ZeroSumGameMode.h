@@ -19,6 +19,8 @@ public:
 	virtual void RestartPlayer(AController* NewPlayer) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
+	
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
 public:
 	// Populate this in the Blueprint child class with the available weapon classes

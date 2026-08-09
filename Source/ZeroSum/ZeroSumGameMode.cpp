@@ -5,12 +5,16 @@
 #include "Components/HealthComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Components/InventoryComponent.h"
 #include "EngineUtils.h"
 #include "FPSCharacter.h"
 #include "WeaponBase.h"
+#include "GameFramework/PlayerStart.h"
+#include "Kismet/GameplayStatics.h"
+#include "DrawDebugHelpers.h"
 
 AZeroSumGameMode::AZeroSumGameMode()
 {
@@ -54,6 +58,12 @@ void AZeroSumGameMode::PostLogin(APlayerController* NewPlayer)
 
 void AZeroSumGameMode::RestartPlayer(AController* NewPlayer)
 {
+	// Clears the controller cached spawn point to force spatial evaluation on respawn
+	if (NewPlayer)
+	{
+		NewPlayer->StartSpot = nullptr;
+	}
+
 	Super::RestartPlayer(NewPlayer);
 
 	// Initialisation of the match loadout to guarantee execution before the first pawn injection
@@ -142,6 +152,9 @@ void AZeroSumGameMode::OnPlayerHealthChanged(UHealthComponent* HealthComponent, 
 		{
 			if (AttachedActor) AttachedActor->Destroy();
 		}
+		
+		// Decouple controller from dead pawn to ensure restart player executes successfully
+		VictimController->UnPossess();
 		VictimPawn->Destroy();
 		
 		// Evaluate match progression state
@@ -301,4 +314,111 @@ void AZeroSumGameMode::Logout(AController* Exiting)
 	}
 
 	Super::Logout(Exiting);
+}
+
+AActor* AZeroSumGameMode::ChoosePlayerStart_Implementation(AController* Player)
+{
+	TArray<AActor*> AllPlayerStarts;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlayerStart::StaticClass(), AllPlayerStarts);
+	
+	// Evaluates the current player state to determine mid match progression
+	AZeroSumPlayerState* PS = Player->GetPlayerState<AZeroSumPlayerState>();
+	bool bIsFirstSpawn = true;
+
+	if (PS && PS->Deaths > 0)
+	{
+		bIsFirstSpawn = false;
+	}
+
+	if (AZeroSumGameState* GS = GetGameState<AZeroSumGameState>())
+	{
+		for (APlayerState* State : GS->PlayerArray)
+		{
+			if (State != PS)
+			{
+				AZeroSumPlayerState* OpponentPS = Cast<AZeroSumPlayerState>(State);
+				if (OpponentPS && OpponentPS->Kills > 0)
+				{
+					bIsFirstSpawn = false;
+					break;
+				}
+			}
+		}
+	}
+
+	// Routes early connections to tagged initial spawn points
+	if (bIsFirstSpawn)
+	{
+		FName TargetTag = Player->IsLocalController() ? FName("initial_host") : FName("initial_client");
+		for (AActor* Start : AllPlayerStarts)
+		{
+			APlayerStart* PStart = Cast<APlayerStart>(Start);
+			if (PStart && PStart->PlayerStartTag == TargetTag)
+			{
+				return PStart; 
+			}
+		}
+	}
+
+	// Excludes initial tagged spawn points from the active mid match respawn array
+	TArray<APlayerStart*> ValidSpawns;
+	for (AActor* Start : AllPlayerStarts)
+	{
+		APlayerStart* PStart = Cast<APlayerStart>(Start);
+		if (PStart && PStart->PlayerStartTag != FName("initial_host") && PStart->PlayerStartTag != FName("initial_client"))
+		{
+			ValidSpawns.Add(PStart);
+		}
+	}
+
+	if (ValidSpawns.Num() == 0)
+	{
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	// Locates the active opponent pawn for spatial distance calculation
+	FVector OpponentLocation = FVector::ZeroVector;
+	bool bFoundOpponent = false;
+
+	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		APlayerController* PC = Iterator->Get();
+		if (PC && PC != Player && PC->GetPawn())
+		{
+			OpponentLocation = PC->GetPawn()->GetActorLocation();
+			bFoundOpponent = true;
+			break; 
+		}
+	}
+
+	if (bFoundOpponent)
+	{
+		struct FSpawnDistance
+		{
+			APlayerStart* Spawn;
+			float Distance;
+		};
+
+		TArray<FSpawnDistance> SpawnDistances;
+		for (APlayerStart* PStart : ValidSpawns)
+		{
+			float Dist = FVector::Dist(PStart->GetActorLocation(), OpponentLocation);
+			SpawnDistances.Add({PStart, Dist});
+		}
+
+		SpawnDistances.Sort([](const FSpawnDistance& A, const FSpawnDistance& B) {
+			return A.Distance > B.Distance;
+		});
+
+		int32 TopCount = FMath::Max(2, SpawnDistances.Num() / 2);
+		TopCount = FMath::Min(TopCount, SpawnDistances.Num());
+
+		// Selects a random spawn from the furthest available pool
+		int32 RandomIndex = FMath::RandRange(0, TopCount - 1);
+		return SpawnDistances[RandomIndex].Spawn;
+	}
+
+	// Selects a random valid spawn when the opponent pawn is missing from the arena
+	int32 RandomFallbackIndex = FMath::RandRange(0, ValidSpawns.Num() - 1);
+	return ValidSpawns[RandomFallbackIndex];
 }

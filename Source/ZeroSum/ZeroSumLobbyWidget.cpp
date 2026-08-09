@@ -239,10 +239,15 @@ void UZeroSumLobbyWidget::OnClientReadyChanged(bool bIsReady)
 
 void UZeroSumLobbyWidget::OnMapChanged(const FString& MapName)
 {
-	// Force the UI dropdown to match the Server's replicated variable
 	if (Drop_MapSelect && Drop_MapSelect->GetSelectedOption() != MapName)
 	{
+		// Temporarily enable widget to execute slate visual refresh
+		bool bWasDisabled = !Drop_MapSelect->GetIsEnabled();
+		if (bWasDisabled) Drop_MapSelect->SetIsEnabled(true);
+		
 		Drop_MapSelect->SetSelectedOption(MapName);
+		
+		if (bWasDisabled) Drop_MapSelect->SetIsEnabled(false);
 	}
 }
 

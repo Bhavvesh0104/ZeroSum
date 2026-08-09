@@ -38,7 +38,10 @@ void AZeroSumLobbyGameMode::StartMatch()
 		{
 			MapURL = TEXT("/Game/ZeroSum/Maps/L_Arena?listen");
 		}
-		// More Maps for future updates
+		else if (GS->SelectedMapName == TEXT("Shipment")) 
+		{
+			MapURL = TEXT("/Game/ZeroSum/Maps/L_Shipment?listen");
+		}
 
 		GetWorld()->ServerTravel(MapURL);
 	}
