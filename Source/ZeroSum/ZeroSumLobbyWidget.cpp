@@ -114,6 +114,8 @@ void UZeroSumLobbyWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 			{
 				if (PC->HasAuthority() && Btn_StartMatch) Btn_StartMatch->SetIsEnabled(GS->bIsClientReady);
 			}
+
+			OnMapChanged(GS->SelectedMapName);
 		}
 
 		// Enforce client UI visibility
